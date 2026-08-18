@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+output/*.pdf
+uploads/*
+!uploads/.gitkeep
+price_table_only.pdf
+.DS_Store
+static/background-original.jpg

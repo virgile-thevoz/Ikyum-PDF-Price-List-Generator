@@ -1,0 +1,257 @@
+/* Self-hosted Inter (SIL OFL 1.1, see static/fonts/OFL.txt) -- not a Google
+   Fonts CDN link, since this app has to work fully offline. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/Inter-Regular.woff") format("woff");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("fonts/Inter-Medium.woff") format("woff");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/Inter-SemiBold.woff") format("woff");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/Inter-Bold.woff") format("woff");
+}
+
+:root {
+  --bg: #006db0;
+  --bg-rgb: 0, 109, 176; /* same color as --bg, split out for use in rgba() below */
+  --bg-text: #ffffff;
+  --ink: #1a1a1a;
+  --muted: #6b6b6b;
+  --line: rgba(26, 26, 26, 0.45); /* dark enough to stay visible on the translucent glass card */
+  --accent: #1a1a1a;
+  --warn-bg: #fbeadb;
+  --warn-border: #d98c2b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--bg);
+  /* Solid blue at the top, gradually revealing the background photo toward
+     the bottom of the viewport: an opaque-to-transparent blue gradient
+     painted over the photo, both anchored to the bottom so the photo's
+     subject stays in frame regardless of viewport height. */
+  background-image:
+    linear-gradient(to bottom, rgba(var(--bg-rgb), 1) 0%, rgba(var(--bg-rgb), 1) 30%, rgba(var(--bg-rgb), 0) 78%),
+    url("background.jpg");
+  background-repeat: no-repeat;
+  background-position: center bottom, center bottom;
+  background-size: cover, cover;
+  background-attachment: fixed, fixed;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px;
+}
+
+.logo {
+  width: 140px;
+  height: auto;
+  display: block;
+}
+
+.lang-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.lang-toggle a {
+  color: var(--bg-text);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 5px;
+}
+
+.lang-toggle a.active {
+  background: var(--bg-text);
+  color: var(--bg);
+  border-color: var(--bg-text);
+  font-weight: 700;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 10px;
+  padding: 40px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0, 30, 60, 0.18);
+}
+
+h1 {
+  font-size: 20px;
+  letter-spacing: 0.3px;
+  margin: 0 0 4px 0;
+}
+
+.subtitle {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 28px 0;
+}
+
+.file-drop {
+  border: 1.5px dashed var(--line);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+input[type="file"] {
+  width: 100%;
+  font-size: 13px;
+}
+
+.field-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.currency-choice {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.currency-choice label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.currency-choice input[type="radio"] {
+  margin: 0;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-bottom: 20px;
+}
+
+.toggle-row input[type="checkbox"] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+button {
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+.error {
+  background: #fbe2e2;
+  border: 1px solid #d94a4a;
+  color: #7a1f1f;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+.warning {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  color: #6b4310;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+.meta {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+
+.meta strong {
+  color: var(--ink);
+}
+
+.download-btn {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  background: var(--accent);
+  color: #fff;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.back-link {
+  display: block;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}

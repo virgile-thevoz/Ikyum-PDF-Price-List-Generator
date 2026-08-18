@@ -1,0 +1,34 @@
+{
+  "fx": {
+    "_comment": "Live rate source is the Frankfurter API (https://frankfurter.dev), a free, no-key service that republishes ECB reference rates. This is NOT XE.com's data feed -- XE's own API is a paid product with no free tier. Frankfurter tracks the same mid-market rate family as XE and is a reasonable free stand-in. If a paid XE subscription is added later, swap the fetch logic in fx_rate.py.",
+    "api_url": "https://api.frankfurter.dev/v1/latest",
+    "base_currency": "CHF",
+    "target_currency": "EUR",
+    "buffer_percent": 1.0,
+    "fallback_rate": 0.96,
+    "request_timeout_seconds": 8
+  },
+  "covers": {
+    "cover_template": "cover-template.pdf",
+    "back_cover_template": "back-cover-template.pdf"
+  },
+  "date_stamp": {
+    "_comment": "Position is in points from the bottom-left corner of the A5 page (420 x 595 pt). Tune these once the real cover designs exist. font must be one of the names registered in cover_stamp.py: Inter, Inter-Medium, Inter-SemiBold, Inter-Bold (or a reportlab built-in like Helvetica).",
+    "cover": {
+      "x": 40,
+      "y": 40,
+      "font": "Inter",
+      "font_size": 10,
+      "color": "#000000"
+    },
+    "back_cover": {
+      "x": 40,
+      "y": 40,
+      "font": "Inter",
+      "font_size": 10,
+      "color": "#000000"
+    }
+  },
+  "output_dir": "output",
+  "upload_dir": "uploads"
+}

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ t('page_title') }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="topbar">
+    <img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="IKYUM">
+    <div class="lang-toggle">
+      {% for code in languages %}
+      <a href="{{ url_for('index', lang=code) }}" class="{{ 'active' if code == lang else '' }}">{{ language_names[code] }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="card">
+      <h1>{{ t('heading') }}</h1>
+      <p class="subtitle">{{ t('subtitle') }}</p>
+
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+
+      <form action="{{ url_for('generate') }}" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="lang" value="{{ lang }}">
+        <div class="file-drop">
+          <input type="file" name="price_list" accept=".xlsx" required>
+        </div>
+
+        <div class="field-label">{{ t('currency_label') }}</div>
+        <div class="currency-choice">
+          <label><input type="radio" name="currency" value="both" {% if currency|default('both') == 'both' %}checked{% endif %}> {{ t('currency_both') }}</label>
+          <label><input type="radio" name="currency" value="chf" {% if currency == 'chf' %}checked{% endif %}> {{ t('currency_chf') }}</label>
+          <label><input type="radio" name="currency" value="eur" {% if currency == 'eur' %}checked{% endif %}> {{ t('currency_eur') }}</label>
+        </div>
+
+        <div class="field-label">{{ t('buffer_label') }}</div>
+        <label class="toggle-row">
+          <input type="checkbox" name="apply_buffer" {% if apply_buffer|default(true) %}checked{% endif %}>
+          {{ t('buffer_checkbox_text', percent=buffer_percent) }}
+        </label>
+
+        <button type="submit">{{ t('generate_button') }}</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

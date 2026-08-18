@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ t('page_title') }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="topbar">
+    <img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="IKYUM">
+    <div class="lang-toggle">
+      {% for code in languages %}
+      <a href="{{ url_for('index', lang=code) }}" class="{{ 'active' if code == lang else '' }}">{{ language_names[code] }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="card">
+      <h1>{{ t('result_heading') }}</h1>
+      <p class="subtitle">{{ date_stamp_text }}</p>
+
+      {% if rate.warning %}
+        <div class="warning">⚠️ {{ rate.warning }}</div>
+      {% endif %}
+
+      <div class="meta">
+        <div><strong>{{ t('label_currency') }}:</strong> {{ t('currency_' + currency_mode) }}</div>
+        <div><strong>{{ t('label_rate_source') }}:</strong> {{ t('rate_source_live') if rate.source == "live" else t('rate_source_fallback') }}</div>
+        <div><strong>{{ t('label_mid_market_rate') }}:</strong> {{ "%.4f"|format(rate.mid_market_rate) }}</div>
+        <div><strong>{{ t('label_buffer_applied') }}:</strong> {% if rate.buffer_percent %}+{{ rate.buffer_percent }}%{% else %}{{ t('buffer_none') }}{% endif %}</div>
+        <div><strong>{{ t('label_rate_used') }}:</strong> {{ "%.4f"|format(rate.buffered_rate) }}</div>
+        <div><strong>{{ t('label_sections') }}:</strong> {{ section_count }}</div>
+        <div><strong>{{ t('label_items') }}:</strong> {{ item_count }}</div>
+      </div>
+
+      <a class="download-btn" href="{{ download_url }}">{{ t('download_button') }}</a>
+      <a class="back-link" href="{{ url_for('index', lang=lang) }}">{{ t('generate_another') }}</a>
+    </div>
+  </div>
+</body>
+</html>
