@@ -8,6 +8,18 @@ Scope note: the fallback-rate warning text built in fx_rate.py (RateResult
 .warning) is left untranslated everywhere -- it's a technical diagnostic
 message that embeds a raw exception string, which can't be meaningfully
 translated anyway.
+
+Most of these strings are web-UI-only (see app.py's render()). Five are
+the exception, all resolved by build_pricelist.py rather than app.py
+directly: "pdf_footer_role" (the one word/phrase in generate_pricelist.py's
+per-page footer that varies by language), "pdf_index_label" (the table of
+contents' own title, and the matching word in the "back to top" link on
+every other page), "pdf_wholesale_column"/"pdf_resale_column" (the price
+table's column headers when a resale multiplier is chosen -- see
+generate_pricelist.py's apply_resale_multiplier), and the "Rates from ..."
+cover date stamp, which is fully localized (label and date format both) by
+date_stamp.py -- see that module's LABELS/MONTH_NAMES rather than this
+file for the date stamp's own strings.
 """
 
 TRANSLATIONS = {
@@ -22,15 +34,25 @@ TRANSLATIONS = {
         "buffer_label": "Exchange rate buffer",
         "buffer_checkbox_text": "Apply +{percent}% buffer on top of the live rate",
         "buffer_none": "None (disabled)",
+        "resale_label": "Resale price multiplier",
+        "pdf_type_label": "PDF type",
+        "pdf_type_web": "Web (interactive)",
+        "pdf_type_print": "Print (crop marks + bleed)",
+        "filename_label": "File name (optional)",
+        "filename_placeholder": "Leave blank for an automatic name",
         "generate_button": "Generate PDF",
         "error_no_file": "Please choose an .xlsx file first.",
         "error_not_xlsx": "File must be a .xlsx workbook.",
         "error_invalid_currency": "Invalid currency option: {value!r}",
+        "error_invalid_pdf_type": "Invalid PDF type option: {value!r}",
+        "error_invalid_resale_multiplier": "Invalid resale multiplier: {value!r}",
         "error_missing_cover": "Missing cover template file: {exc}. Run make_placeholder_covers.py "
                                 "first, or check config.json's cover paths.",
         "error_generation_failed": "Generation failed: {exc}",
         "result_heading": "Price list ready",
+        "label_filename": "File name",
         "label_currency": "Currency",
+        "label_pdf_type": "PDF type",
         "label_rate_source": "Rate source",
         "rate_source_live": "Live (Frankfurter API)",
         "rate_source_fallback": "Fallback (config.json)",
@@ -41,6 +63,11 @@ TRANSLATIONS = {
         "label_items": "Items",
         "download_button": "Download PDF",
         "generate_another": "Generate another",
+        "label_resale_multiplier": "Resale multiplier",
+        "pdf_footer_role": "Authorized Representative",
+        "pdf_index_label": "Index",
+        "pdf_wholesale_column": "Wholesale",
+        "pdf_resale_column": "Resale",
     },
     "fr": {
         "page_title": "Générateur de liste de prix IKYUM",
@@ -53,15 +80,25 @@ TRANSLATIONS = {
         "buffer_label": "Marge sur le taux de change",
         "buffer_checkbox_text": "Appliquer une marge de +{percent}% sur le taux en direct",
         "buffer_none": "Aucune (désactivée)",
+        "resale_label": "Multiplicateur du prix de revente",
+        "pdf_type_label": "Type de PDF",
+        "pdf_type_web": "Web (interactif)",
+        "pdf_type_print": "Impression (traits de coupe + fond perdu)",
+        "filename_label": "Nom du fichier (facultatif)",
+        "filename_placeholder": "Laisser vide pour un nom automatique",
         "generate_button": "Générer le PDF",
         "error_no_file": "Veuillez d'abord choisir un fichier .xlsx.",
         "error_not_xlsx": "Le fichier doit être un classeur .xlsx.",
         "error_invalid_currency": "Option de devise invalide : {value!r}",
+        "error_invalid_pdf_type": "Option de type de PDF invalide : {value!r}",
+        "error_invalid_resale_multiplier": "Multiplicateur de revente invalide : {value!r}",
         "error_missing_cover": "Fichier modèle de couverture manquant : {exc}. Exécutez d'abord "
                                 "make_placeholder_covers.py, ou vérifiez les chemins dans config.json.",
         "error_generation_failed": "Échec de la génération : {exc}",
         "result_heading": "Liste de prix prête",
+        "label_filename": "Nom du fichier",
         "label_currency": "Devise",
+        "label_pdf_type": "Type de PDF",
         "label_rate_source": "Source du taux",
         "rate_source_live": "En direct (API Frankfurter)",
         "rate_source_fallback": "Secours (config.json)",
@@ -72,6 +109,11 @@ TRANSLATIONS = {
         "label_items": "Articles",
         "download_button": "Télécharger le PDF",
         "generate_another": "Générer une autre liste",
+        "label_resale_multiplier": "Multiplicateur de revente",
+        "pdf_footer_role": "Mandataire autorisé",
+        "pdf_index_label": "Index",
+        "pdf_wholesale_column": "Gros",
+        "pdf_resale_column": "Vente",
     },
     "de": {
         "page_title": "IKYUM Preislisten-Generator",
@@ -84,15 +126,25 @@ TRANSLATIONS = {
         "buffer_label": "Wechselkurspuffer",
         "buffer_checkbox_text": "Puffer von +{percent}% auf den Live-Kurs anwenden",
         "buffer_none": "Keiner (deaktiviert)",
+        "resale_label": "Wiederverkaufsfaktor",
+        "pdf_type_label": "PDF-Typ",
+        "pdf_type_web": "Web (interaktiv)",
+        "pdf_type_print": "Druck (Schnittmarken + Beschnitt)",
+        "filename_label": "Dateiname (optional)",
+        "filename_placeholder": "Leer lassen für einen automatischen Namen",
         "generate_button": "PDF erstellen",
         "error_no_file": "Bitte wählen Sie zuerst eine .xlsx-Datei aus.",
         "error_not_xlsx": "Die Datei muss eine .xlsx-Arbeitsmappe sein.",
         "error_invalid_currency": "Ungültige Währungsoption: {value!r}",
+        "error_invalid_pdf_type": "Ungültige PDF-Typ-Option: {value!r}",
+        "error_invalid_resale_multiplier": "Ungültiger Wiederverkaufsfaktor: {value!r}",
         "error_missing_cover": "Cover-Vorlagendatei fehlt: {exc}. Führen Sie zuerst "
                                 "make_placeholder_covers.py aus, oder prüfen Sie die Pfade in config.json.",
         "error_generation_failed": "Erstellung fehlgeschlagen: {exc}",
         "result_heading": "Preisliste bereit",
+        "label_filename": "Dateiname",
         "label_currency": "Währung",
+        "label_pdf_type": "PDF-Typ",
         "label_rate_source": "Kursquelle",
         "rate_source_live": "Live (Frankfurter API)",
         "rate_source_fallback": "Ausweichwert (config.json)",
@@ -103,6 +155,11 @@ TRANSLATIONS = {
         "label_items": "Artikel",
         "download_button": "PDF herunterladen",
         "generate_another": "Weitere erstellen",
+        "label_resale_multiplier": "Wiederverkaufsfaktor",
+        "pdf_footer_role": "Bevollmächtigter",
+        "pdf_index_label": "Verzeichnis",
+        "pdf_wholesale_column": "Einkauf",
+        "pdf_resale_column": "Verkauf",
     },
 }
 

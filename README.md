@@ -40,8 +40,17 @@ placeholders are no longer used.
 ```
 
 Open **http://127.0.0.1:5000**, upload the workbook, pick a currency
-(CHF + EUR, CHF only, or EUR only — CHF + EUR is the default), click
-Generate, download the PDF.
+(CHF + EUR, CHF only, or EUR only — CHF + EUR is the default), an exchange
+rate buffer, a resale price multiplier (None by default — see "Resale
+price" below), a PDF type (Web or Print — see "PDF type: web vs print"
+below), and optionally a file name, click Generate, download the PDF.
+
+The file name field controls only the *downloaded* file's name (what your
+browser saves it as) — leave it blank for an automatic
+`pricelist_<timestamp>_<id>.pdf` name. Whatever you type is sanitized
+(invalid filesystem characters stripped, a single `.pdf` extension
+enforced) rather than rejected, so accented names like "Liste d'été" come
+through untouched. See `sanitize_pdf_filename` in `app.py`.
 
 The live rate is always fetched and both covers always read "Rates from
 [date]", even for a CHF-only export where no conversion actually happens —
@@ -58,13 +67,27 @@ picked on the upload page even though that's a separate request.
 
 Translation strings live in `i18n.py` as a plain dict per language — add a
 new key there (and to every language's dict) and reference it in a
-template with `{{ t('your_key') }}`. **Scope note:** only the app's own UI
-chrome is translated. The "Rates from [date]" text stamped onto the actual
-PDF covers is not — it's produced by `date_stamp.py`'s hand-rolled English
-ordinal formatter and stays in English regardless of the UI language,
-since nothing in the brief called for translating PDF content, and the
-fallback-rate warning message (which embeds a raw exception string) isn't
-translated for the same reason it can't be meaningfully translated anyway.
+template with `{{ t('your_key') }}`.
+
+**Scope note:** mostly this only covers the app's own UI chrome — but two
+pieces of actual *PDF* content follow the same language choice too:
+
+- the "Rates from [date]" text stamped onto the cover and back-cover pages
+  — both its label and the date format itself (`date_stamp.py`, which owns
+  its own EN/FR/DE strings rather than reusing `i18n.py`, since it needs
+  per-language month names and date-ordering rules, not just a label)
+- the one translated word/phrase in the per-page footer at the bottom of
+  every price-table page (`i18n.py`'s `"pdf_footer_role"` — "Mandataire
+  autorisé" / "Authorized Representative" / "Bevollmächtigter") — see
+  "Page footer" below
+- the price table's "Wholesale"/"Resale" column headers, when a resale
+  multiplier is chosen (`i18n.py`'s `"pdf_wholesale_column"`/
+  `"pdf_resale_column"`) — see "Resale price" below
+
+Everything else in the PDF — category/item names, descriptions — comes
+straight from the workbook and is never touched, and the fallback-rate
+warning message (which embeds a raw exception string) still isn't
+translated, since it can't be meaningfully translated anyway.
 
 ## Test the full pipeline headlessly
 
@@ -76,8 +99,11 @@ Runs the whole flow against `sample_data.xlsx` and the placeholder covers,
 and checks: page count/order (cover → TOC → price pages → back cover), that
 EUR values match `ROUND(CHF * buffered_rate, 2)`, that the date stamp text
 appears on both cover pages, that the table of contents lists every
-category, and that every TOC link's destination resolves to the actual
-correct final page number.
+category, that every TOC link's destination resolves to the actual correct
+final page number, and — for `pdf_type="print"` — that the final page
+count is a multiple of 4, that no page carries a clickable link
+annotation, and that every page (bar the back cover — see its known
+size-mismatch note above) is grown to the bleed+marks size.
 
 ## Exchange rate
 
@@ -108,6 +134,43 @@ EUR prices are computed as `ROUND(CHF * buffered_rate, 2)` for every price
 cell at generation time. This is the **only** source of truth for EUR
 prices — any "Exchange Rate" sheet or formulas left over in a workbook from
 an older version are ignored.
+
+## Resale price
+
+Every price in the workbook is the manufacturer's **wholesale** price.
+The upload page has a "Resale price multiplier" dropdown, right below the
+exchange rate buffer: **None** (disabled, default — today's plain
+wholesale-only table) or one of **×1.1 / ×1.2 / ×1.3 / ×1.4 / ×1.5**
+(+10% through +50%). Picking one adds a resale-price column, computed as
+`ROUND(wholesale price * multiplier, 2)`, next to every wholesale price in
+the table — one multiplier for the whole document, applied uniformly
+(see `generate_pricelist.py`'s `apply_resale_multiplier` /
+`RESALE_MULTIPLIERS`).
+
+Resale is computed from each currency's own (already-rounded) wholesale
+value directly — CHF resale from CHF wholesale, EUR resale from EUR
+wholesale — rather than converting through the other currency, so "resale
+= wholesale × multiplier" holds exactly in whichever currency column
+you're actually looking at.
+
+**Column layout:** with a single currency shown, the table just gains a
+second price column ("Wholesale" / "Resale"). With CHF + EUR both shown,
+that would be 4 price columns — instead of flattening them, the header
+groups CHF and EUR each into their own Wholesale/Resale pair (a two-row
+header, `rowspan`/`colspan` on the "Option" and currency cells):
+
+```
+                    CHF              EUR
+OPTION       WHOLESALE  RESALE  WHOLESALE  RESALE
+CLARITY B-UV   120.00   144.00   109.80    131.76
+```
+
+The "Wholesale"/"Resale" column headers follow the client's language
+choice like the rest of the PDF's added text (see "Language" above) —
+deliberately short (e.g. German "Einkauf"/"Verkauf" rather than the fuller
+"Großhandelspreis"/"Wiederverkaufspreis") so they don't wrap in the
+narrower 4-column layout; adjust `i18n.py`'s `"pdf_wholesale_column"`/
+`"pdf_resale_column"` if you'd rather have the fuller forms.
 
 ## Config
 
@@ -174,6 +237,26 @@ This only affects the *web UI's* background and logo — it has no effect on
 the actual PDF cover pages, which are entirely your own
 `cover-template.pdf` / `back-cover-template.pdf` designs.
 
+## Page footer
+
+Every price-table page — the table of contents and every category page,
+i.e. every page of the PDF *except* the cover and back cover, which are
+separate pages handled entirely by `cover_stamp.py` — carries a small
+company-info line at the bottom: "RedNnmore Sàrl. | [role] | Rte d'Yverdon
+30 CH-1028 Préverenges | info@redNmore.com", where `[role]` is the one
+part that follows the client's language choice (see "Language" above).
+
+This used to be an embedded SVG logo (a "CH | REP" badge plus this same
+text, outlined to vector paths in Illustrator) but that rendered with
+visibly deformed glyphs — most likely a font-hinting/outline issue baked
+into the exported SVG itself — so it was replaced with plain text
+(`generate_pricelist.py`'s `FOOTER_TEXT_TEMPLATE`), which is guaranteed
+legible since it's real text set in the document's own embedded font
+rather than someone else's vector export. It shares the bottom margin row
+with the running page number via two separate `@page` margin boxes
+(`@bottom-center` for the footer text, `@bottom-right` for the page
+number) rather than any manual position stacking.
+
 ## Table of contents
 
 The price-table PDF opens with a table of contents (right after the cover):
@@ -205,6 +288,54 @@ The cover and back cover are still added with `add_page()` since they're
 single already-stamped pages with no internal links of their own to carry
 over.
 
+**Back to top:** every price-table page (web mode only — see "PDF type"
+below) also carries a small "↑ Contents" link in the top-right corner,
+back to the table of contents (`.back-to-top` in `generate_pricelist.py`,
+targeting the TOC's own `id="toc"`) — a discreet way back to the index
+from anywhere in a long catalog, without needing the PDF viewer's own page
+navigation.
+
+## PDF type: web vs print
+
+The upload page has a "PDF type" choice, right below the exchange rate
+buffer:
+
+- **Web** (default) — today's interactive PDF: trim size only, clickable
+  table of contents.
+- **Print** — the same content, laid out for an actual booklet print run:
+  - every page (cover, price-table pages, back cover) grows by a 3mm bleed
+    plus a 5mm crop-mark margin on every side — see `print_layout.py` for
+    the exact geometry, shared by `generate_pricelist.py` (which draws its
+    own marks natively in CSS for the price-table pages) and
+    `print_marks.py` (which draws the equivalent marks by hand with pypdf
+    + reportlab for the cover/back-cover pages, since those are opaque
+    pre-rendered PDFs WeasyPrint never sees).
+  - the table of contents entries become plain, non-clickable text —
+    still showing the correct page number (still computed by CSS
+    `target-counter()`, just off a `data-target` attribute instead of an
+    `href`), but with no PDF link annotations, since a printed booklet has
+    nothing to click.
+  - the **final** page count (cover through back cover) is padded with
+    blank marked filler pages, inserted right before the back cover, up to
+    a multiple of 4 — required for saddle-stitch booklet printing, where
+    each physical sheet folds down to 4 pages.
+
+**Known limitation, current cover templates only:** `cover-template.pdf`
+and `back-cover-template.pdf` are plain trim-size PDFs (148 x 210mm) with
+no bleed artwork of their own baked in — the front cover in particular is
+already a finished design whose photography reaches exactly to the trim
+edge with nothing further out. `print_marks.py` can only add *blank*
+margin around them (crop marks drawn correctly, but a genuine white/empty
+bleed strip rather than extended artwork), so on a physical print run any
+trimming variance could reveal a thin white sliver at the cut edge. Fixing
+this properly means re-exporting the cover artwork from InDesign/
+Illustrator with real 3mm bleed built in; `print_marks.add_bleed_and_marks`
+reads each page's own actual size, so it'll keep working once that happens
+— though it currently always *adds* the full margin on top of whatever
+page size it's given, so a future cover PDF that already ships with bleed
+baked in (a larger MediaBox than its TrimBox) would need that distinction
+handled explicitly rather than just dropped in as-is.
+
 ## How it fits together
 
 - **`generate_pricelist.py`** — reads every sheet in the workbook
@@ -221,7 +352,15 @@ over.
 - **`cover_stamp.py`** — draws the date-stamp text onto a blank overlay page
   (reportlab) and merges it onto the cover template page (`pypdf`
   `merge_page`) — standard watermark-style stamping. The template's own
-  design is never touched, only drawn on top of.
+  design is never touched, only drawn on top of. For `pdf_type="print"`,
+  also adds bleed + crop marks to the cover/back-cover pages (via
+  `print_marks.py`) and pads the final page count to a multiple of 4.
+- **`print_layout.py`** — shared bleed/crop-mark/booklet-multiple constants
+  for the "print PDF" export mode (see "PDF type: web vs print" above).
+- **`print_marks.py`** — adds bleed margin + crop marks to a trim-size PDF
+  page by hand (pypdf + reportlab) — used for the cover, back-cover, and
+  blank filler pages in print mode, since those are opaque pre-rendered
+  PDFs that `generate_pricelist.py`'s WeasyPrint/CSS approach never sees.
 - **`build_pricelist.py`** — orchestrates the above into one final PDF:
   stamped cover → TOC + price-table pages → stamped back cover (`pypdf`
   `PdfWriter`).
@@ -250,14 +389,19 @@ option in that list.
 
 **Row detection — column A's bold formatting is the primary signal:**
 
-- **Category header row**: column A's cell is bold. Any other text-only
-  cells on that row (columns B onward) become the option labels applied to
-  numeric cells in the item rows below it — e.g. a header row of `["HC",
-  "CLARITY", "MIRROR"]` in columns B/C/D means a later item's numeric price
-  in column C is labelled "CLARITY". Labels reset at each new header row —
-  a header that doesn't repeat a label leaves that column's items showing
-  the generic fallback label "Price".
-- **Item row**: column A has text and is *not* bold. For each other cell:
+- **Category header row**: column A's cell is bold *and* has its own
+  option-column labels in the other columns (text, e.g. `["HC", "CLARITY",
+  "MIRROR"]` in columns B/C/D) — those labels apply to numeric cells in the
+  item rows below it, until the next such header row, e.g. a later item's
+  numeric price in column C is labelled "CLARITY". A header that doesn't
+  repeat a label leaves that column's items showing the generic fallback
+  label "Price" (this is legitimate for a genuinely single-price section —
+  see "Section descriptions and sub-headings" below for the more common
+  reason it used to show up everywhere).
+- **Item row**: column A has text, and either isn't bold or *is* bold but
+  carries a numeric price of its own (some workbooks bold a row for
+  emphasis even though it's simultaneously a real priced item — that still
+  needs its price recorded, not discarded). For each other cell:
   - a **number** → a priced option (labelled per the header row above)
   - `x` / `n/a` / `-` / `--` → that option isn't offered, skipped
   - any other text → folded into the item's description (e.g. a diameter
@@ -272,10 +416,25 @@ a header. Bold is preferred whenever it's present, since it directly
 reflects the source author's intent and isn't fooled by a non-header row
 that happens to have no priced options (a footnote, for instance).
 
-**Known limitation:** if a genuine item row is bold *and* has zero numeric
-cells (all options unavailable), it will be misread as a new category
-header, since positionally there's no way to tell those two cases apart.
-Give it at least one price, or don't bold it, to avoid that.
+**Section descriptions and sub-headings:** a bold, no-numeric-cell row with
+*no* option-column labels of its own can't be a category header (it has no
+labels to apply), so it never starts a new section or resets the current
+labels — instead:
+
+- the **first** such row under a section title becomes that section's
+  description, shown as a subtitle right under the title in the PDF (e.g.
+  a bold "Unifocal sur mesure" line under a "SINGLE RX" title)
+- any **further** one in the same section (this happens when two
+  formerly-separate sections get merged into one, e.g. single-vision and
+  progressive variants of the same lens family sharing a title) is shown
+  as a small heading above whichever item comes next, rather than being
+  silently dropped
+
+**Known limitation:** if a genuine item row is bold, has zero numeric
+cells (all options unavailable), *and* has no text of its own in the other
+columns, it'll be misread as a section description/sub-heading rather than
+an item, since positionally there's no way to tell those cases apart. Give
+it at least one price, or don't bold it, to avoid that.
 
 See `make_sample_data.py` for a simple worked example (14 categories, one
 price per item).

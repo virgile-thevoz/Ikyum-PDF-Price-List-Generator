@@ -16,6 +16,9 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
+import print_marks
+from print_layout import BOOKLET_PAGE_MULTIPLE
+
 # Self-hosted Inter (SIL OFL 1.1, see static/fonts/OFL.txt), registered with
 # reportlab under these names so config.json's date_stamp.font can select
 # them. reportlab needs actual .ttf files -- static/fonts/*.woff (used by the
@@ -67,13 +70,24 @@ def assemble_final_pdf(
     date_stamp_text: str,
     cover_stamp_config: dict,
     back_cover_stamp_config: dict,
+    pdf_type: str = "web",
 ) -> bytes:
     """Builds the final PDF: stamped cover + all price-table pages + stamped
     back cover, in that order.
+
+    pdf_type "print" additionally: adds bleed + crop marks to the cover and
+    back-cover pages (print_marks.py -- price_table_pdf_bytes is expected to
+    already carry its own, via generate_pricelist.py's print-mode
+    rendering), and pads the *final* page count up to a multiple of
+    print_layout.BOOKLET_PAGE_MULTIPLE with blank marked filler pages, for
+    saddle-stitch booklet printing. Fillers are inserted right before the
+    back cover so it stays the physically last page of the printed booklet.
     """
     writer = PdfWriter()
 
     cover_page = stamp_pdf_page(cover_template_path, date_stamp_text, cover_stamp_config)
+    if pdf_type == "print":
+        cover_page = print_marks.add_bleed_and_marks(cover_page)
     writer.add_page(cover_page)
 
     # append(), not a page-by-page add_page() loop: the price-table PDF's
@@ -87,6 +101,11 @@ def assemble_final_pdf(
     writer.append(price_table_reader)
 
     back_cover_page = stamp_pdf_page(back_cover_template_path, date_stamp_text, back_cover_stamp_config)
+    if pdf_type == "print":
+        back_cover_page = print_marks.add_bleed_and_marks(back_cover_page)
+        remainder = (len(writer.pages) + 1) % BOOKLET_PAGE_MULTIPLE  # +1 for the back cover about to be added
+        for _ in range(BOOKLET_PAGE_MULTIPLE - remainder if remainder else 0):
+            writer.add_page(print_marks.make_blank_marked_page())
     writer.add_page(back_cover_page)
 
     output = io.BytesIO()

@@ -7,3 +7,7 @@ uploads/*
 price_table_only.pdf
 .DS_Store
 static/background-original.jpg
+
+# Real client workbooks dropped in for local testing -- contains actual
+# wholesale pricing, not sample/fixture data, so it never gets committed.
+source-xlsx/

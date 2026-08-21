@@ -43,6 +43,24 @@
           {{ t('buffer_checkbox_text', percent=buffer_percent) }}
         </label>
 
+        <div class="field-label">{{ t('resale_label') }}</div>
+        <select name="resale_multiplier" class="text-input">
+          <option value="" {% if not resale_multiplier %}selected{% endif %}>{{ t('buffer_none') }}</option>
+          {% for m in [1.1, 1.2, 1.3, 1.4, 1.5] %}
+          <option value="{{ m }}" {% if resale_multiplier == m|string %}selected{% endif %}>&times;{{ "%.1f"|format(m) }} (+{{ ((m - 1) * 100) | round | int }}%)</option>
+          {% endfor %}
+        </select>
+
+        <div class="field-label">{{ t('pdf_type_label') }}</div>
+        <div class="currency-choice">
+          <label><input type="radio" name="pdf_type" value="web" {% if pdf_type|default('web') == 'web' %}checked{% endif %}> {{ t('pdf_type_web') }}</label>
+          <label><input type="radio" name="pdf_type" value="print" {% if pdf_type == 'print' %}checked{% endif %}> {{ t('pdf_type_print') }}</label>
+        </div>
+
+        <div class="field-label">{{ t('filename_label') }}</div>
+        <input type="text" name="output_name" class="text-input" maxlength="150"
+               placeholder="{{ t('filename_placeholder') }}" value="{{ output_name|default('') }}">
+
         <button type="submit">{{ t('generate_button') }}</button>
       </form>
     </div>

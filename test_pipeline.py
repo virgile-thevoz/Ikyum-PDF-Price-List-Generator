@@ -9,6 +9,12 @@ Checks:
   - the table of contents lists every category and links to the right page
   - footer page numbers match the TOC's page numbers and the true final
     page position (i.e. the cover_page_count offset is applied correctly)
+  - pdf_type="print": final page count is a multiple of 4 (booklet
+    printing), every page carries no clickable link annotations, and every
+    page grows to the bleed+marks size (see print_layout.py)
+  - resale_multiplier: no wholesale/resale columns when unset (today's
+    plain table), and when set, resale = ROUND(wholesale * multiplier, 2)
+    in both currencies, matching generate_pricelist.apply_resale_multiplier
 
 Run with: python test_pipeline.py
 """
@@ -20,15 +26,19 @@ from pypdf import PdfReader
 
 from build_pricelist import build
 from fx_rate import load_config
-from generate_pricelist import apply_exchange_rate, parse_workbook
+from generate_pricelist import apply_exchange_rate, apply_resale_multiplier, parse_workbook
+from print_layout import BOOKLET_PAGE_MULTIPLE, MARK_MARGIN_MM, MM_TO_PT, TRIM_HEIGHT_MM, TRIM_WIDTH_MM
 
 
 def footer_page_number(page) -> str:
-    """Extracts the last line of a page's text -- where @bottom-center puts
-    the page-number footer -- for a quick sanity check.
+    """Extracts the page number from the last line of a page's text -- the
+    bottom margin row, shared by the @bottom-center company footer and the
+    @bottom-right page number (see generate_pricelist.py's @page rule), so
+    the number is the trailing token rather than the whole line.
     """
     text = (page.extract_text() or "").strip()
-    return text.splitlines()[-1] if text else ""
+    last_line = text.splitlines()[-1] if text else ""
+    return last_line.split()[-1] if last_line else ""
 
 
 def main() -> int:
@@ -107,23 +117,65 @@ def main() -> int:
             f"{no_buffer_result.rate.buffered_rate} vs {no_buffer_result.rate.mid_market_rate}"
         )
 
+    # -- Resale multiplier: disabled by default (today's plain table), and
+    #    when set, resale = ROUND(wholesale * multiplier, 2) in both
+    #    currencies, recomputed independently from the source workbook.
+    plain_text = reader.pages[2].extract_text() or ""
+    if "WHOLESALE" in plain_text.upper() or "RESALE" in plain_text.upper():
+        failures.append(f"resale_multiplier=None: expected no wholesale/resale columns. Got: {plain_text!r}")
+    resale_result = build("sample_data.xlsx", config, currency_mode="both", resale_multiplier=1.2)
+    if resale_result.resale_multiplier != 1.2:
+        failures.append(f"resale_multiplier=1.2: BuildResult.resale_multiplier is {resale_result.resale_multiplier!r}")
+    resale_reader = PdfReader(io.BytesIO(resale_result.pdf_bytes))
+    resale_page_text = resale_reader.pages[2].extract_text() or ""
+    for token in ("WHOLESALE", "RESALE", "CHF", "EUR"):
+        if token not in resale_page_text.upper():
+            failures.append(f"resale_multiplier=1.2: expected {token!r} on first price page. Got: {resale_page_text!r}")
+    resale_sections = parse_workbook("sample_data.xlsx")
+    apply_exchange_rate(resale_sections, resale_result.rate.buffered_rate)
+    apply_resale_multiplier(resale_sections, 1.2)
+    resale_mismatches = []
+    for section in resale_sections:
+        for item in section.items:
+            for price in item.prices:
+                expected_chf_resale = round(price.chf * 1.2, 2)
+                expected_eur_resale = round(price.eur * 1.2, 2)
+                if abs(price.chf_resale - expected_chf_resale) > 1e-9 or abs(price.eur_resale - expected_eur_resale) > 1e-9:
+                    resale_mismatches.append((item.name, price.label, price.chf_resale, price.eur_resale))
+    if resale_mismatches:
+        failures.append(f"Resale price calculation mismatches: {resale_mismatches}")
+    invalid_resale_raised = False
+    try:
+        apply_resale_multiplier(resale_sections, 1.25)  # not one of RESALE_MULTIPLIERS
+    except ValueError:
+        invalid_resale_raised = True
+    if not invalid_resale_raised:
+        failures.append("apply_resale_multiplier(1.25): expected ValueError for an out-of-range multiplier")
+
     # -- Table of contents: page 2 (index 1) lists every category by name.
     cover_page_count = 1  # the placeholder cover is a single page
     toc_text = reader.pages[1].extract_text() or ""
-    if "contents" not in toc_text.lower():
-        failures.append(f"TOC heading 'Contents' not found on page 2. Extracted text was: {toc_text!r}")
+    if "index" not in toc_text.lower():
+        failures.append(f"TOC heading 'Index' not found on page 2. Extracted text was: {toc_text!r}")
     for section in sections:
         if section.name not in toc_text:
             failures.append(f"TOC missing category name: {section.name!r}")
 
-    # -- Named destinations: one per section, each resolving to the correct
-    #    final page index (cover pages + TOC page + that section's position).
+    # -- Named destinations: one per section, plus "toc" (the back-to-top
+    #    link's target -- see generate_pricelist.py's .back-to-top), each
+    #    resolving to the correct final page index (cover pages + TOC page +
+    #    that section's position).
     named_dests = reader.named_destinations
-    expected_dest_names = {f"section-{i + 1}" for i in range(len(sections))}
+    expected_dest_names = {f"section-{i + 1}" for i in range(len(sections))} | {"toc"}
     actual_dest_names = set(named_dests.keys())
     if actual_dest_names != expected_dest_names:
         failures.append(
             f"Named destinations mismatch. Expected {expected_dest_names}, got {actual_dest_names}"
+        )
+    if "toc" in named_dests and reader.get_destination_page_number(named_dests["toc"]) != cover_page_count:
+        failures.append(
+            f"'toc' named destination resolves to page index {reader.get_destination_page_number(named_dests['toc'])}, "
+            f"expected {cover_page_count} (the TOC page)"
         )
     for i, section in enumerate(sections):
         name = f"section-{i + 1}"
@@ -137,6 +189,14 @@ def main() -> int:
                 f"{actual_page_index}, expected {expected_page_index}"
             )
 
+    # -- Back-to-top link: a section page should carry a /Link annotation
+    #    pointing at the "toc" destination (web mode only -- checked absent
+    #    in print mode further down, alongside the other annotation checks).
+    section_page_annots = reader.pages[2].get("/Annots") or []
+    back_to_top_dests = [a.get_object().get("/Dest") for a in section_page_annots]
+    if "toc" not in back_to_top_dests:
+        failures.append(f"No back-to-top link (dest 'toc') found on the first section page. Link dests: {back_to_top_dests}")
+
     # -- Footer page numbers: TOC page and first section page should read
     #    the true final page number, not restart from 1.
     toc_footer = footer_page_number(reader.pages[1])
@@ -145,6 +205,51 @@ def main() -> int:
     first_section_footer = footer_page_number(reader.pages[2])
     if first_section_footer != str(cover_page_count + 2):
         failures.append(f"First section page footer reads {first_section_footer!r}, expected {cover_page_count + 2!r}")
+
+    # -- Print PDF: booklet-ready page count, no clickable links, and every
+    #    page grown to the bleed+marks size.
+    print_result = build("sample_data.xlsx", config, pdf_type="print")
+    print_reader = PdfReader(io.BytesIO(print_result.pdf_bytes))
+    print_total_pages = len(print_reader.pages)
+    if print_total_pages % BOOKLET_PAGE_MULTIPLE != 0:
+        failures.append(
+            f"pdf_type=print: total page count {print_total_pages} is not a multiple of {BOOKLET_PAGE_MULTIPLE}"
+        )
+    non_empty_annots = [i for i, p in enumerate(print_reader.pages) if p.get("/Annots")]
+    if non_empty_annots:
+        failures.append(f"pdf_type=print: expected no clickable links, found annotations on pages {non_empty_annots}")
+    expected_w = round(TRIM_WIDTH_MM * MM_TO_PT + 2 * MARK_MARGIN_MM * MM_TO_PT, 1)
+    expected_h = round(TRIM_HEIGHT_MM * MM_TO_PT + 2 * MARK_MARGIN_MM * MM_TO_PT, 1)
+    # Every page except the back cover (its own template's stated size is
+    # ~0.5pt off nominal A5 -- a pre-existing placeholder imprecision, not
+    # something this feature introduces) should match the canonical size.
+    for i, p in enumerate(print_reader.pages[:-1]):
+        actual_w, actual_h = round(float(p.mediabox.width), 1), round(float(p.mediabox.height), 1)
+        if (actual_w, actual_h) != (expected_w, expected_h):
+            failures.append(
+                f"pdf_type=print: page {i} size {actual_w}x{actual_h}pt, expected {expected_w}x{expected_h}pt"
+            )
+
+    # -- Language-dependent PDF content: the cover date stamp, the per-page
+    #    footer's one translated word, and the TOC/back-to-top index label
+    #    all follow lang, independent of the workbook's own (untouched)
+    #    category/item names.
+    lang_expectations = {
+        "en": ("Rates from August", "Authorized Representative", "Index"),
+        "fr": ("Tarifs valables à partir du", "Mandataire autorisé", "Index"),
+        "de": ("Preise gültig ab", "Bevollmächtigter", "Verzeichnis"),
+    }
+    for lang, (date_stamp_prefix, footer_role, index_label) in lang_expectations.items():
+        lang_result = build("sample_data.xlsx", config, lang=lang)
+        if not lang_result.date_stamp_text.startswith(date_stamp_prefix):
+            failures.append(f"lang={lang!r}: date stamp {lang_result.date_stamp_text!r} doesn't start with {date_stamp_prefix!r}")
+        lang_reader = PdfReader(io.BytesIO(lang_result.pdf_bytes))
+        toc_text = lang_reader.pages[1].extract_text() or ""
+        if footer_role not in toc_text:
+            failures.append(f"lang={lang!r}: footer role {footer_role!r} not found on TOC page. Got: {toc_text!r}")
+        if toc_text.lower().count(index_label.lower()) < 2:
+            # once for the TOC's own title, once for the back-to-top link's text
+            failures.append(f"lang={lang!r}: index label {index_label!r} expected twice on TOC page. Got: {toc_text!r}")
 
     if failures:
         print("\nFAILED:")

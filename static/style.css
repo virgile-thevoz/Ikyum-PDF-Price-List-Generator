@@ -191,6 +191,21 @@ input[type="file"] {
   flex-shrink: 0;
 }
 
+.text-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--ink);
+  margin-bottom: 20px;
+}
+
+.text-input::placeholder {
+  color: var(--muted);
+}
+
 button {
   width: 100%;
   background: var(--accent);
