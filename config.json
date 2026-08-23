@@ -9,22 +9,29 @@
     "request_timeout_seconds": 8
   },
   "covers": {
-    "cover_template": "cover-template.pdf",
-    "back_cover_template": "back-cover-template.pdf"
+    "_comment": "A separate cover/back-cover pair per pdf_type ('web' or 'print' -- see build_pricelist.py). The print pair is real InDesign exports with their own bleed + crop marks already built in (a /TrimBox smaller than /MediaBox); the web pair is either the same kind of file (bleed gets cropped back off, see print_marks.crop_to_trim) or a plain trim-size PDF.",
+    "web": {
+      "cover_template": "cover-template-web.pdf",
+      "back_cover_template": "back-cover-template-web.pdf"
+    },
+    "print": {
+      "cover_template": "cover-template-print.pdf",
+      "back_cover_template": "back-cover-template-print.pdf"
+    }
   },
   "date_stamp": {
-    "_comment": "Position is in points from the bottom-left corner of the A5 page (420 x 595 pt). Tune these once the real cover designs exist. font must be one of the names registered in cover_stamp.py: Inter, Inter-Medium, Inter-SemiBold, Inter-Bold (or a reportlab built-in like Helvetica).",
+    "_comment": "Position is in points from the bottom-left corner of each cover's own trim area (its /TrimBox, not necessarily the full page -- see cover_stamp.stamp_pdf_page). x=22pt (~7.8mm) matches the real covers' own left text margin (measured off the rendered PDF, not a value from the design source). font must be one of the names registered in cover_stamp.py: Inter, Inter-Medium, Inter-SemiBold, Inter-Bold (or a reportlab built-in like Helvetica). Inter-Bold at 10pt matches the weight/size of the cover templates' own nearby text (e.g. the front cover's 'IKYUM® -- Verres ophtalmiques sur mesure.' tagline).",
     "cover": {
-      "x": 40,
+      "x": 22,
       "y": 40,
-      "font": "Inter",
+      "font": "Inter-Bold",
       "font_size": 10,
       "color": "#000000"
     },
     "back_cover": {
-      "x": 40,
-      "y": 40,
-      "font": "Inter",
+      "x": 22,
+      "y": 80,
+      "font": "Inter-Bold",
       "font_size": 10,
       "color": "#000000"
     }

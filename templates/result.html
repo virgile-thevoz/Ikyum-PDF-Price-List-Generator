@@ -29,9 +29,15 @@
         <div><strong>{{ t('label_currency') }}:</strong> {{ t('currency_' + currency_mode) }}</div>
         <div><strong>{{ t('label_pdf_type') }}:</strong> {{ t('pdf_type_' + pdf_type) }}</div>
         <div><strong>{{ t('label_resale_multiplier') }}:</strong> {% if resale_multiplier %}&times;{{ "%.1f"|format(resale_multiplier) }}{% else %}{{ t('buffer_none') }}{% endif %}</div>
-        <div><strong>{{ t('label_rate_source') }}:</strong> {{ t('rate_source_live') if rate.source == "live" else t('rate_source_fallback') }}</div>
+        <div><strong>{{ t('label_rate_source') }}:</strong>
+          {% if rate.source == "custom" %}{{ t('rate_source_custom') }}
+          {% elif rate.source == "live" %}{{ t('rate_source_live') }}
+          {% else %}{{ t('rate_source_fallback') }}{% endif %}
+        </div>
+        {% if rate.source != "custom" %}
         <div><strong>{{ t('label_mid_market_rate') }}:</strong> {{ "%.4f"|format(rate.mid_market_rate) }}</div>
         <div><strong>{{ t('label_buffer_applied') }}:</strong> {% if rate.buffer_percent %}+{{ rate.buffer_percent }}%{% else %}{{ t('buffer_none') }}{% endif %}</div>
+        {% endif %}
         <div><strong>{{ t('label_rate_used') }}:</strong> {{ "%.4f"|format(rate.buffered_rate) }}</div>
         <div><strong>{{ t('label_sections') }}:</strong> {{ section_count }}</div>
         <div><strong>{{ t('label_items') }}:</strong> {{ item_count }}</div>

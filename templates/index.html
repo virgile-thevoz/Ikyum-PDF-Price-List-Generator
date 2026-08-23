@@ -37,17 +37,26 @@
           <label><input type="radio" name="currency" value="eur" {% if currency == 'eur' %}checked{% endif %}> {{ t('currency_eur') }}</label>
         </div>
 
+        <div class="field-label">{{ t('rate_mode_label') }}</div>
+        <div class="currency-choice">
+          <label><input type="radio" name="rate_mode" value="daily" {% if rate_mode|default('daily') == 'daily' %}checked{% endif %}> {{ t('rate_mode_daily') }}</label>
+          <label><input type="radio" name="rate_mode" value="custom" {% if rate_mode == 'custom' %}checked{% endif %}> {{ t('rate_mode_custom') }}</label>
+        </div>
+        <input type="text" name="custom_rate" class="text-input" inputmode="decimal" maxlength="20"
+               placeholder="{{ t('custom_rate_placeholder') }}" value="{{ custom_rate|default('') }}">
+
         <div class="field-label">{{ t('buffer_label') }}</div>
         <label class="toggle-row">
           <input type="checkbox" name="apply_buffer" {% if apply_buffer|default(true) %}checked{% endif %}>
           {{ t('buffer_checkbox_text', percent=buffer_percent) }}
         </label>
+        <div class="field-hint">{{ t('buffer_daily_only_hint') }}</div>
 
         <div class="field-label">{{ t('resale_label') }}</div>
         <select name="resale_multiplier" class="text-input">
           <option value="" {% if not resale_multiplier %}selected{% endif %}>{{ t('buffer_none') }}</option>
-          {% for m in [1.1, 1.2, 1.3, 1.4, 1.5] %}
-          <option value="{{ m }}" {% if resale_multiplier == m|string %}selected{% endif %}>&times;{{ "%.1f"|format(m) }} (+{{ ((m - 1) * 100) | round | int }}%)</option>
+          {% for m in [0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5] %}
+          <option value="{{ m }}" {% if resale_multiplier == m|string %}selected{% endif %}>&times;{{ "%.1f"|format(m) }} ({{ "%+d"|format((((m - 1) * 100) | round | int)) }}%)</option>
           {% endfor %}
         </select>
 

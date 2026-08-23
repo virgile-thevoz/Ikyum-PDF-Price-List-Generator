@@ -10,6 +10,17 @@ WeasyPrint never sees, so their bleed/marks have to be added by hand here
 with pypdf and reportlab -- using the exact same `print_layout` constants,
 so every page in the final print PDF ends up the same size regardless of
 which of the two code paths produced it.
+
+Two cover situations are handled, distinguished by has_own_bleed():
+
+- **a plain trim-size cover** (no /TrimBox of its own, e.g. the original
+  placeholder covers): add_bleed_and_marks() fabricates a bleed margin
+  (left blank -- see its docstring) and draws our own crop marks.
+- **a real print-ready export** (from InDesign or similar, /TrimBox
+  smaller than /MediaBox -- e.g. the actual IKYUM cover designs): already
+  has its own bleed and marks baked in by the designer, so it's used
+  as-is in print mode, and crop_to_trim() strips that margin back off for
+  web mode (where every page should be the same clean trim size).
 """
 
 import io
@@ -63,12 +74,53 @@ def _marks_only_page(page_width_pt: float, page_height_pt: float):
     return PdfReader(buffer).pages[0]
 
 
+def has_own_bleed(page: PageObject) -> bool:
+    """True if `page` already ships with its own bleed/crop-mark margin --
+    i.e. it's a real print-ready export (from InDesign or similar) whose
+    /TrimBox is smaller than its /MediaBox, with the trim area inset
+    somewhere inside the larger sheet. False for a plain trim-size page (no
+    separate /TrimBox, so pypdf's `.trimbox` falls back to `.mediabox` and
+    the two compare equal) -- e.g. the original placeholder covers, which
+    still need add_bleed_and_marks' treatment. See that function and
+    cover_stamp.assemble_final_pdf for how this decides whether to trust a
+    cover's own bleed/marks or fabricate a plain one.
+    """
+    trim = page.trimbox
+    media = page.mediabox
+    return float(trim.width) < float(media.width) or float(trim.height) < float(media.height)
+
+
+def crop_to_trim(page: PageObject) -> PageObject:
+    """Crops `page` down to its own /TrimBox in place, discarding any
+    surrounding bleed/crop-mark margin -- the "web PDF" counterpart to
+    add_bleed_and_marks, so a cover exported with real bleed built in
+    (has_own_bleed(page) is True) still ends up the same clean trim size as
+    the rest of the interactive PDF. A no-op if the page has no bleed
+    margin of its own (has_own_bleed(page) is False) -- it's already
+    trim-size.
+
+    Only the page's box metadata changes here (which region is "visible"),
+    not its content stream's coordinate space -- so anything already
+    stamped onto the page (see cover_stamp.stamp_pdf_page, which positions
+    relative to /TrimBox for exactly this reason) stays correctly placed.
+    """
+    if has_own_bleed(page):
+        page.mediabox = page.trimbox
+        page.cropbox = page.trimbox
+    return page
+
+
 def add_bleed_and_marks(page: PageObject) -> PageObject:
     """Returns a new page: `page`'s own content centered on a larger canvas
     (page size + 2*MARK_MARGIN_PT on each dimension), with crop marks drawn
     at the true trim corners. `page`'s own design is untouched -- see
     print_layout.py's docstring for why the bleed area is left blank rather
     than fabricating extended artwork.
+
+    Only meant for a plain trim-size page (has_own_bleed(page) is False) --
+    callers should use `page` as-is when it already has its own bleed/marks
+    baked in, rather than adding this as a redundant second layer on top;
+    see has_own_bleed and cover_stamp.assemble_final_pdf.
     """
     trim_width_pt = float(page.mediabox.width)
     trim_height_pt = float(page.mediabox.height)

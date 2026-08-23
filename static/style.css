@@ -206,6 +206,12 @@ input[type="file"] {
   color: var(--muted);
 }
 
+.field-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin: -14px 0 20px 0;
+}
+
 button {
   width: 100%;
   background: var(--accent);

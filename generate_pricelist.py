@@ -271,7 +271,7 @@ def apply_exchange_rate(sections: list[Section], buffered_rate: float) -> None:
                 price.eur = round(price.chf * buffered_rate, 2)
 
 
-RESALE_MULTIPLIERS = {1.1, 1.2, 1.3, 1.4, 1.5}
+RESALE_MULTIPLIERS = {0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5}
 
 
 def apply_resale_multiplier(sections: list[Section], multiplier: float | None) -> None:
@@ -284,8 +284,10 @@ def apply_resale_multiplier(sections: list[Section], multiplier: float | None) -
 
     A no-op when multiplier is None (the default -- no resale price chosen,
     matching today's plain wholesale-only table); render_price_table_pdf's
-    own resale_multiplier controls whether the resulting columns are shown
-    at all, independent of whether this was ever called.
+    own resale_multiplier controls whether the resulting values are shown
+    at all, independent of whether this was ever called. When shown, the
+    resale price *replaces* the wholesale price in the table rather than
+    adding a second column next to it -- see render_price_table_pdf.
     """
     if multiplier is None:
         return
@@ -403,14 +405,25 @@ PAGE_TEMPLATE = """
   /* Discreet per-page link back to the table of contents -- "fixed"
      repeats it on every page (same mechanism as the print mode's crop
      marks), sitting in the top margin above the section title so it never
-     competes with the page's own content. Web mode only: print mode has
-     no clickable links at all -- see the "PDF type" docstring section. */
+     competes with the page's own content. Styled as a small pill button
+     (background + border + rounded corners + padding), not plain text --
+     both for a clearer tap affordance and a bigger touch target on
+     touchscreens (e.g. iPad PDF viewers), and sits a bit further down
+     from the physical top edge for the same reason -- easier to reach
+     without fighting the viewer app's own top-edge chrome. Web mode
+     only: print mode has no clickable links at all -- see the "PDF type"
+     docstring section. */
   .back-to-top {
     position: fixed;
-    top: -9mm;
+    top: -4mm;
     right: 0;
-    font-size: 7pt;
-    color: #999;
+    display: inline-block;
+    padding: 3pt 9pt;
+    font-size: 7.5pt;
+    color: #666;
+    background: #f0f0f0;
+    border: 0.5pt solid #ddd;
+    border-radius: 9pt;
     text-decoration: none;
     letter-spacing: 0.2pt;
   }
@@ -520,15 +533,6 @@ PAGE_TEMPLATE = """
     white-space: nowrap;
     width: 22%;
   }
-  {% if price_col_count == 4 %}
-  /* Wholesale + resale in both currencies is 4 price columns instead of
-     the usual 1 or 2 -- narrower so "Option" (rowspan across the grouped
-     CHF/EUR header, see the table markup below) keeps enough room. */
-  table.price-subtable th.price-col,
-  table.price-subtable td.price-col {
-    width: 15%;
-  }
-  {% endif %}
   table.price-subtable td {
     padding: 1.5pt 4pt;
   }
@@ -567,49 +571,21 @@ PAGE_TEMPLATE = """
     {% if item.description %}<div class="item-desc">{{ item.description }}</div>{% endif %}
     <table class="price-subtable">
       <thead>
-        {% if show_resale and show_chf and show_eur %}
-        {# Both currencies plus resale: a 2-row grouped header (CHF/EUR
-           spanning their own wholesale+resale pair) rather than 4 flatly
-           labeled columns -- see the "Column layout" note in generate_pricelist.py. #}
         <tr>
-          <th rowspan="2">Option</th>
-          <th class="price-col" colspan="2">CHF</th>
-          <th class="price-col" colspan="2">EUR</th>
-        </tr>
-        <tr>
-          <th class="price-col">{{ wholesale_label }}</th>
-          <th class="price-col">{{ resale_label }}</th>
-          <th class="price-col">{{ wholesale_label }}</th>
-          <th class="price-col">{{ resale_label }}</th>
-        </tr>
-        {% elif show_resale %}
-        {# Single currency plus resale: no grouping needed, same as the
-           plain single-currency case just below already omits repeating
-           the currency code. #}
-        <tr>
-          <th>Option</th>
-          {% if show_chf %}<th class="price-col">{{ wholesale_label }}</th><th class="price-col">{{ resale_label }}</th>{% endif %}
-          {% if show_eur %}<th class="price-col">{{ wholesale_label }}</th><th class="price-col">{{ resale_label }}</th>{% endif %}
-        </tr>
-        {% else %}
-        <tr>
-          <th>Option</th>
+          <th>{{ option_label }}</th>
           {% if show_chf %}<th class="price-col">CHF</th>{% endif %}
           {% if show_eur %}<th class="price-col">EUR</th>{% endif %}
         </tr>
-        {% endif %}
       </thead>
       <tbody>
         {% for price in item.prices %}
         <tr>
           <td>{{ price.label }}</td>
-          {% if show_resale %}
-          {% if show_chf %}<td class="price-col">{{ "%.2f"|format(price.chf) }}</td><td class="price-col">{{ "%.2f"|format(price.chf_resale) }}</td>{% endif %}
-          {% if show_eur %}<td class="price-col">{{ "%.2f"|format(price.eur) }}</td><td class="price-col">{{ "%.2f"|format(price.eur_resale) }}</td>{% endif %}
-          {% else %}
-          {% if show_chf %}<td class="price-col">{{ "%.2f"|format(price.chf) }}</td>{% endif %}
-          {% if show_eur %}<td class="price-col">{{ "%.2f"|format(price.eur) }}</td>{% endif %}
-          {% endif %}
+          {# When a resale multiplier is chosen, its price *replaces* the
+             wholesale price shown here rather than adding a second column
+             next to it -- see apply_resale_multiplier. #}
+          {% if show_chf %}<td class="price-col">{{ "%.2f"|format(price.chf_resale if show_resale else price.chf) }}</td>{% endif %}
+          {% if show_eur %}<td class="price-col">{{ "%.2f"|format(price.eur_resale if show_resale else price.eur) }}</td>{% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -689,9 +665,8 @@ def render_price_table_pdf(
     pdf_type: str = "web",
     footer_role: str = "Authorized Representative",
     index_label: str = "Index",
+    option_label: str = "Options",
     resale_multiplier: float | None = None,
-    wholesale_label: str = "Wholesale",
-    resale_label: str = "Resale",
 ) -> bytes:
     """Renders a table of contents plus the category sections to a
     multi-page A5 PDF and returns the raw PDF bytes (no cover pages --
@@ -710,24 +685,27 @@ def render_price_table_pdf(
     + crop marks, non-clickable table of contents) -- see the "PDF type"
     section of this module's docstring.
 
-    footer_role and index_label are already-translated (e.g. via i18n.py's
-    translator) strings -- footer_role (e.g. "Mandataire autorisé",
-    "Authorized Representative", "Bevollmächtigter") is slotted into
-    FOOTER_TEXT_TEMPLATE for the footer shown at the bottom of every page;
-    index_label (e.g. "Index", "Verzeichnis") is both the table of
-    contents' own title and the word used in the "back to top" link
-    (.back-to-top) on every other page. build_pricelist.py resolves both
-    via i18n.py before calling in, so this module itself stays uninvolved
-    in language selection.
+    footer_role, index_label, and option_label are already-translated
+    (e.g. via i18n.py's translator) strings -- footer_role (e.g.
+    "Mandataire autorisé", "Authorized Representative", "Bevollmächtigter")
+    is slotted into FOOTER_TEXT_TEMPLATE for the footer shown at the bottom
+    of every page; index_label (e.g. "Index", "Verzeichnis") is both the
+    table of contents' own title and the word used in the "back to top"
+    link (.back-to-top) on every other page; option_label (e.g. "Options",
+    "Optionen") is the price sub-table's own column header, above each
+    item's option names (HC, Clarity, Clarity Blue Pro, etc.) -- plural in
+    every language, since an item can (and usually does) list more than
+    one option. build_pricelist.py resolves all three via i18n.py before
+    calling in, so this module itself stays uninvolved in language
+    selection.
 
-    resale_multiplier is None (default, today's plain wholesale-only table)
-    or one of RESALE_MULTIPLIERS -- when set, every priced option shows an
-    extra resale-price column per active currency (see
-    apply_resale_multiplier, which must be called beforehand to actually
-    populate PriceEntry.chf_resale/eur_resale; this parameter only controls
-    whether the resulting columns are rendered). wholesale_label and
-    resale_label are the already-translated column headers for that case
-    (e.g. "Wholesale"/"Resale", "Gros"/"Vente", "Einkauf"/"Verkauf").
+    resale_multiplier is None (default, today's plain wholesale-price
+    table) or one of RESALE_MULTIPLIERS -- when set, every priced option's
+    resale price (see apply_resale_multiplier, which must be called
+    beforehand to actually populate PriceEntry.chf_resale/eur_resale)
+    *replaces* its wholesale price in the table, rather than showing both;
+    this parameter only controls which value is displayed, independent of
+    whether apply_resale_multiplier was ever called.
     """
     if currency_mode not in CURRENCY_MODES:
         raise ValueError(f"currency_mode must be one of {CURRENCY_MODES}, got {currency_mode!r}")
@@ -745,7 +723,6 @@ def render_price_table_pdf(
     show_chf = currency_mode in ("chf", "both")
     show_eur = currency_mode in ("eur", "both")
     show_resale = resale_multiplier is not None
-    price_col_count = (2 if show_resale else 1) * (show_chf + show_eur)
 
     env = Environment(autoescape=True)
     template = env.from_string(PAGE_TEMPLATE)
@@ -769,10 +746,8 @@ def render_price_table_pdf(
         crop_marks=_crop_mark_styles(margin_top_mm, margin_right_mm, margin_bottom_mm, margin_left_mm) if is_print else [],
         footer_text=FOOTER_TEXT_TEMPLATE.format(role=footer_role),
         index_label=index_label,
+        option_label=option_label,
         show_resale=show_resale,
-        price_col_count=price_col_count,
-        wholesale_label=wholesale_label,
-        resale_label=resale_label,
     )
     return HTML(string=html_content, base_url=PROJECT_ROOT).write_pdf()
 

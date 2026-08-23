@@ -9,17 +9,22 @@ Scope note: the fallback-rate warning text built in fx_rate.py (RateResult
 message that embeds a raw exception string, which can't be meaningfully
 translated anyway.
 
-Most of these strings are web-UI-only (see app.py's render()). Five are
+Most of these strings are web-UI-only (see app.py's render()). Six are
 the exception, all resolved by build_pricelist.py rather than app.py
 directly: "pdf_footer_role" (the one word/phrase in generate_pricelist.py's
 per-page footer that varies by language), "pdf_index_label" (the table of
 contents' own title, and the matching word in the "back to top" link on
-every other page), "pdf_wholesale_column"/"pdf_resale_column" (the price
-table's column headers when a resale multiplier is chosen -- see
-generate_pricelist.py's apply_resale_multiplier), and the "Rates from ..."
-cover date stamp, which is fully localized (label and date format both) by
-date_stamp.py -- see that module's LABELS/MONTH_NAMES rather than this
-file for the date stamp's own strings.
+every other page), "pdf_option_column_label" (each item's price sub-table
+column header, above its option names -- always plural, since an item
+usually lists more than one option), "pdf_sale_prices_label" and
+"pdf_wholesale_prices_label" (stamped on the front cover only,
+right-aligned next to the date stamp -- exactly one of the two always
+appears, "sale" when a resale multiplier is chosen and "wholesale" when it
+isn't, flagging which kind of price the table shows -- see
+cover_stamp.assemble_final_pdf's price_type_text), and the "Rates from
+..." cover date stamp, which is fully localized (label and date format
+both) by date_stamp.py -- see that module's LABELS/MONTH_NAMES rather than
+this file for the date stamp's own strings.
 """
 
 TRANSLATIONS = {
@@ -31,8 +36,13 @@ TRANSLATIONS = {
         "currency_both": "CHF + EUR",
         "currency_chf": "CHF only",
         "currency_eur": "EUR only",
+        "rate_mode_label": "Exchange rate",
+        "rate_mode_daily": "Daily rate",
+        "rate_mode_custom": "Custom rate",
+        "custom_rate_placeholder": "e.g. 0.97",
         "buffer_label": "Exchange rate buffer",
         "buffer_checkbox_text": "Apply +{percent}% buffer on top of the live rate",
+        "buffer_daily_only_hint": "Applies to the daily rate only",
         "buffer_none": "None (disabled)",
         "resale_label": "Resale price multiplier",
         "pdf_type_label": "PDF type",
@@ -46,6 +56,8 @@ TRANSLATIONS = {
         "error_invalid_currency": "Invalid currency option: {value!r}",
         "error_invalid_pdf_type": "Invalid PDF type option: {value!r}",
         "error_invalid_resale_multiplier": "Invalid resale multiplier: {value!r}",
+        "error_invalid_rate_mode": "Invalid exchange rate option: {value!r}",
+        "error_invalid_custom_rate": "Invalid custom rate: {value!r}. Enter a positive number, e.g. 0.97.",
         "error_missing_cover": "Missing cover template file: {exc}. Run make_placeholder_covers.py "
                                 "first, or check config.json's cover paths.",
         "error_generation_failed": "Generation failed: {exc}",
@@ -56,6 +68,7 @@ TRANSLATIONS = {
         "label_rate_source": "Rate source",
         "rate_source_live": "Live (Frankfurter API)",
         "rate_source_fallback": "Fallback (config.json)",
+        "rate_source_custom": "Custom (entered manually)",
         "label_mid_market_rate": "Mid-market rate",
         "label_buffer_applied": "Buffer applied",
         "label_rate_used": "Rate used for EUR prices",
@@ -66,8 +79,9 @@ TRANSLATIONS = {
         "label_resale_multiplier": "Resale multiplier",
         "pdf_footer_role": "Authorized Representative",
         "pdf_index_label": "Index",
-        "pdf_wholesale_column": "Wholesale",
-        "pdf_resale_column": "Resale",
+        "pdf_option_column_label": "Options",
+        "pdf_sale_prices_label": "Sale prices",
+        "pdf_wholesale_prices_label": "Wholesale prices",
     },
     "fr": {
         "page_title": "Générateur de liste de prix IKYUM",
@@ -77,8 +91,13 @@ TRANSLATIONS = {
         "currency_both": "CHF + EUR",
         "currency_chf": "CHF uniquement",
         "currency_eur": "EUR uniquement",
+        "rate_mode_label": "Taux de change",
+        "rate_mode_daily": "Taux du jour",
+        "rate_mode_custom": "Taux personnalisé",
+        "custom_rate_placeholder": "p. ex. 0,97",
         "buffer_label": "Marge sur le taux de change",
         "buffer_checkbox_text": "Appliquer une marge de +{percent}% sur le taux en direct",
+        "buffer_daily_only_hint": "S'applique uniquement au taux du jour",
         "buffer_none": "Aucune (désactivée)",
         "resale_label": "Multiplicateur du prix de revente",
         "pdf_type_label": "Type de PDF",
@@ -92,6 +111,8 @@ TRANSLATIONS = {
         "error_invalid_currency": "Option de devise invalide : {value!r}",
         "error_invalid_pdf_type": "Option de type de PDF invalide : {value!r}",
         "error_invalid_resale_multiplier": "Multiplicateur de revente invalide : {value!r}",
+        "error_invalid_rate_mode": "Option de taux de change invalide : {value!r}",
+        "error_invalid_custom_rate": "Taux personnalisé invalide : {value!r}. Saisissez un nombre positif, p. ex. 0,97.",
         "error_missing_cover": "Fichier modèle de couverture manquant : {exc}. Exécutez d'abord "
                                 "make_placeholder_covers.py, ou vérifiez les chemins dans config.json.",
         "error_generation_failed": "Échec de la génération : {exc}",
@@ -102,6 +123,7 @@ TRANSLATIONS = {
         "label_rate_source": "Source du taux",
         "rate_source_live": "En direct (API Frankfurter)",
         "rate_source_fallback": "Secours (config.json)",
+        "rate_source_custom": "Personnalisé (saisi manuellement)",
         "label_mid_market_rate": "Taux interbancaire",
         "label_buffer_applied": "Marge appliquée",
         "label_rate_used": "Taux utilisé pour les prix EUR",
@@ -112,8 +134,9 @@ TRANSLATIONS = {
         "label_resale_multiplier": "Multiplicateur de revente",
         "pdf_footer_role": "Mandataire autorisé",
         "pdf_index_label": "Index",
-        "pdf_wholesale_column": "Gros",
-        "pdf_resale_column": "Vente",
+        "pdf_option_column_label": "Options",
+        "pdf_sale_prices_label": "Prix de vente",
+        "pdf_wholesale_prices_label": "Prix d'achat",
     },
     "de": {
         "page_title": "IKYUM Preislisten-Generator",
@@ -123,8 +146,13 @@ TRANSLATIONS = {
         "currency_both": "CHF + EUR",
         "currency_chf": "Nur CHF",
         "currency_eur": "Nur EUR",
+        "rate_mode_label": "Wechselkurs",
+        "rate_mode_daily": "Tageskurs",
+        "rate_mode_custom": "Eigener Kurs",
+        "custom_rate_placeholder": "z. B. 0,97",
         "buffer_label": "Wechselkurspuffer",
         "buffer_checkbox_text": "Puffer von +{percent}% auf den Live-Kurs anwenden",
+        "buffer_daily_only_hint": "Gilt nur für den Tageskurs",
         "buffer_none": "Keiner (deaktiviert)",
         "resale_label": "Wiederverkaufsfaktor",
         "pdf_type_label": "PDF-Typ",
@@ -138,6 +166,8 @@ TRANSLATIONS = {
         "error_invalid_currency": "Ungültige Währungsoption: {value!r}",
         "error_invalid_pdf_type": "Ungültige PDF-Typ-Option: {value!r}",
         "error_invalid_resale_multiplier": "Ungültiger Wiederverkaufsfaktor: {value!r}",
+        "error_invalid_rate_mode": "Ungültige Wechselkurs-Option: {value!r}",
+        "error_invalid_custom_rate": "Ungültiger eigener Kurs: {value!r}. Geben Sie eine positive Zahl ein, z. B. 0,97.",
         "error_missing_cover": "Cover-Vorlagendatei fehlt: {exc}. Führen Sie zuerst "
                                 "make_placeholder_covers.py aus, oder prüfen Sie die Pfade in config.json.",
         "error_generation_failed": "Erstellung fehlgeschlagen: {exc}",
@@ -148,6 +178,7 @@ TRANSLATIONS = {
         "label_rate_source": "Kursquelle",
         "rate_source_live": "Live (Frankfurter API)",
         "rate_source_fallback": "Ausweichwert (config.json)",
+        "rate_source_custom": "Benutzerdefiniert (manuell eingegeben)",
         "label_mid_market_rate": "Mittelkurs",
         "label_buffer_applied": "Angewendeter Puffer",
         "label_rate_used": "Für EUR-Preise verwendeter Kurs",
@@ -158,8 +189,9 @@ TRANSLATIONS = {
         "label_resale_multiplier": "Wiederverkaufsfaktor",
         "pdf_footer_role": "Bevollmächtigter",
         "pdf_index_label": "Verzeichnis",
-        "pdf_wholesale_column": "Einkauf",
-        "pdf_resale_column": "Verkauf",
+        "pdf_option_column_label": "Optionen",
+        "pdf_sale_prices_label": "Verkaufspreise",
+        "pdf_wholesale_prices_label": "Einkaufspreise",
     },
 }
 

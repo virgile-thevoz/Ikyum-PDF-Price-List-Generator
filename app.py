@@ -67,6 +67,25 @@ def parse_resale_multiplier(raw: str) -> float | None:
     return value
 
 
+RATE_MODES = {"daily", "custom"}
+
+
+def parse_custom_rate(raw: str) -> float:
+    """Parses the custom_rate form field into a positive float. Accepts a
+    comma as the decimal separator as well as a period (the person filling
+    this in may have their browser in a French/German locale, where 0,97 is
+    the natural way to type this), so "0.97" and "0,97" both work. Raises
+    ValueError if empty, not a number, or not positive.
+    """
+    raw = (raw or "").strip().replace(",", ".")
+    if not raw:
+        raise ValueError("custom_rate is required when rate_mode is 'custom'")
+    value = float(raw)
+    if value <= 0:
+        raise ValueError(f"custom_rate must be positive, got {value!r}")
+    return value
+
+
 def current_lang() -> str:
     """The language for this request: an explicit ?lang=/form field wins,
     then the cookie from a previous visit, then the default (English).
@@ -101,12 +120,15 @@ def generate():
     pdf_type = request.form.get("pdf_type", "web")
     output_name = request.form.get("output_name", "")
     resale_multiplier_raw = request.form.get("resale_multiplier", "")
+    rate_mode = request.form.get("rate_mode", "daily")
+    custom_rate_raw = request.form.get("custom_rate", "")
     apply_buffer = "apply_buffer" in request.form
     buffer_percent = CONFIG["fx"]["buffer_percent"]
     # Common re-render context shared by every validation-error/exception
     # branch below, so the client's other choices aren't lost on error.
     form_state = dict(currency=currency_mode, pdf_type=pdf_type, output_name=output_name,
-                       resale_multiplier=resale_multiplier_raw, apply_buffer=apply_buffer, buffer_percent=buffer_percent)
+                       resale_multiplier=resale_multiplier_raw, apply_buffer=apply_buffer, buffer_percent=buffer_percent,
+                       rate_mode=rate_mode, custom_rate=custom_rate_raw)
 
     uploaded = request.files.get("price_list")
     if uploaded is None or uploaded.filename == "":
@@ -117,10 +139,18 @@ def generate():
         return render("index.html", 400, lang=lang, error=t("error_invalid_currency", value=currency_mode), **form_state)
     if pdf_type not in PDF_TYPES:
         return render("index.html", 400, lang=lang, error=t("error_invalid_pdf_type", value=pdf_type), **form_state)
+    if rate_mode not in RATE_MODES:
+        return render("index.html", 400, lang=lang, error=t("error_invalid_rate_mode", value=rate_mode), **form_state)
     try:
         resale_multiplier = parse_resale_multiplier(resale_multiplier_raw)
     except ValueError:
         return render("index.html", 400, lang=lang, error=t("error_invalid_resale_multiplier", value=resale_multiplier_raw), **form_state)
+    custom_rate = None
+    if rate_mode == "custom":
+        try:
+            custom_rate = parse_custom_rate(custom_rate_raw)
+        except ValueError:
+            return render("index.html", 400, lang=lang, error=t("error_invalid_custom_rate", value=custom_rate_raw), **form_state)
 
     run_id = uuid.uuid4().hex[:8]
     safe_name = secure_filename(uploaded.filename)
@@ -128,7 +158,7 @@ def generate():
     uploaded.save(upload_path)
 
     try:
-        result = build(upload_path, CONFIG, currency_mode, apply_buffer, pdf_type, lang, resale_multiplier)
+        result = build(upload_path, CONFIG, currency_mode, apply_buffer, pdf_type, lang, resale_multiplier, custom_rate)
     except FileNotFoundError as exc:
         return render("index.html", 400, lang=lang, error=t("error_missing_cover", exc=exc), **form_state)
     except Exception as exc:

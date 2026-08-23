@@ -4,7 +4,13 @@ be tested end-to-end before the real InDesign/Illustrator covers exist.
 Each placeholder is a plain background with a title and a text box marking
 where the date stamp will land (matching config.json's date_stamp position).
 Run once: `python make_placeholder_covers.py`. Safe to re-run any time --
-it overwrites the two files in the project root.
+it overwrites whichever four files config.json's "covers" section currently
+points to (one cover + back-cover pair per pdf_type, "web" and "print").
+
+**Real covers already exist for this project** (config.json's default
+paths), so running this script as-is will overwrite them with placeholders
+again -- only do that deliberately (e.g. point config.json elsewhere
+first), not by habit.
 """
 
 import json
@@ -53,22 +59,24 @@ def main() -> None:
     with open("config.json", "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    covers = config["covers"]
     stamps = config["date_stamp"]
 
-    make_placeholder(
-        covers["cover_template"],
-        title="Placeholder cover",
-        subtitle="Replace with the real InDesign/Illustrator cover design",
-        stamp_config=stamps["cover"],
-    )
-    make_placeholder(
-        covers["back_cover_template"],
-        title="Placeholder back cover",
-        subtitle="Replace with the real InDesign/Illustrator back cover design",
-        stamp_config=stamps["back_cover"],
-    )
-    print(f"Wrote {covers['cover_template']} and {covers['back_cover_template']}")
+    for pdf_type, covers in config["covers"].items():
+        if pdf_type.startswith("_"):
+            continue  # config.json's "_comment" key
+        make_placeholder(
+            covers["cover_template"],
+            title=f"Placeholder cover ({pdf_type})",
+            subtitle="Replace with the real InDesign/Illustrator cover design",
+            stamp_config=stamps["cover"],
+        )
+        make_placeholder(
+            covers["back_cover_template"],
+            title=f"Placeholder back cover ({pdf_type})",
+            subtitle="Replace with the real InDesign/Illustrator back cover design",
+            stamp_config=stamps["back_cover"],
+        )
+        print(f"Wrote {covers['cover_template']} and {covers['back_cover_template']}")
 
 
 if __name__ == "__main__":

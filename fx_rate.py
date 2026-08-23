@@ -1,4 +1,5 @@
-"""Live CHF -> EUR exchange rate fetch, with a buffer and an offline fallback.
+"""Live CHF -> EUR exchange rate fetch, with a buffer and an offline fallback
+-- or a client-entered custom rate that bypasses all of that.
 
 Rate source: the Frankfurter API (https://frankfurter.dev), a free, no-key
 service that republishes ECB reference rates. This is NOT XE.com's own feed --
@@ -16,10 +17,10 @@ import requests
 
 @dataclass
 class RateResult:
-    mid_market_rate: float       # raw rate as fetched (or fallback value)
+    mid_market_rate: float       # raw rate as fetched (or fallback/custom value)
     buffered_rate: float         # rate actually used to compute EUR prices
     buffer_percent: float
-    source: str                  # "live" or "fallback"
+    source: str                  # "live", "fallback", or "custom"
     fetched_at: datetime
     warning: str | None = None   # set when the fallback rate had to be used
 
@@ -46,7 +47,10 @@ def fetch_live_rate(config: dict) -> float:
 
 
 def get_current_rate(
-    config: dict | None = None, config_path: str = "config.json", apply_buffer: bool = True
+    config: dict | None = None,
+    config_path: str = "config.json",
+    apply_buffer: bool = True,
+    custom_rate: float | None = None,
 ) -> RateResult:
     """Fetches the current CHF->EUR rate, optionally applies the configured
     buffer, and falls back to a manually-configured rate if the live fetch
@@ -57,7 +61,25 @@ def get_current_rate(
     which stays the source of truth for *what* the buffer is when it's on.
     RateResult.buffer_percent always reflects what was actually applied (0
     when apply_buffer is False), not just what's configured.
+
+    custom_rate, when given, bypasses the live fetch/fallback and
+    apply_buffer entirely: RateResult.source is "custom", and both
+    mid_market_rate and buffered_rate are exactly custom_rate. No buffer on
+    top of a number the client typed themselves -- the whole point is
+    letting them directly control the final price, not adding a hidden
+    markup they didn't ask for.
     """
+    if custom_rate is not None:
+        if custom_rate <= 0:
+            raise ValueError(f"custom_rate must be positive, got {custom_rate!r}")
+        return RateResult(
+            mid_market_rate=custom_rate,
+            buffered_rate=custom_rate,
+            buffer_percent=0.0,
+            source="custom",
+            fetched_at=datetime.now(timezone.utc),
+            warning=None,
+        )
     if config is None:
         config = load_config(config_path)
     fx = config["fx"]

@@ -21,17 +21,20 @@ brew install pango cairo gdk-pixbuf libffi
 
 ## First-time setup: placeholder covers + sample data
 
-The real cover PDFs (designed in InDesign/Illustrator) aren't built yet. For
-local testing, generate simple placeholders and a sample workbook:
+The real cover PDFs (designed in InDesign/Illustrator, one pair per
+`pdf_type` — see "Cover templates: one pair per PDF type" below) already
+exist for this project. If you ever need to regenerate placeholders instead
+(e.g. testing without the real designs), or a sample workbook:
 
 ```bash
-./venv/bin/python make_placeholder_covers.py   # -> cover-template.pdf, back-cover-template.pdf
+./venv/bin/python make_placeholder_covers.py   # overwrites whatever config.json's "covers" currently points to
 ./venv/bin/python make_sample_data.py          # -> sample_data.xlsx
 ```
 
-Once the real `cover-template.pdf` / `back-cover-template.pdf` exist, drop
-them in the project root (same filenames, or update `config.json`) and the
-placeholders are no longer used.
+**Careful:** by default that first command overwrites the real cover files,
+since that's what `config.json` points to today — only run it if you
+actually mean to replace them with placeholders (e.g. after repointing
+`config.json` elsewhere first).
 
 ## Run
 
@@ -80,9 +83,6 @@ pieces of actual *PDF* content follow the same language choice too:
   every price-table page (`i18n.py`'s `"pdf_footer_role"` — "Mandataire
   autorisé" / "Authorized Representative" / "Bevollmächtigter") — see
   "Page footer" below
-- the price table's "Wholesale"/"Resale" column headers, when a resale
-  multiplier is chosen (`i18n.py`'s `"pdf_wholesale_column"`/
-  `"pdf_resale_column"`) — see "Resale price" below
 
 Everything else in the PDF — category/item names, descriptions — comes
 straight from the workbook and is never touched, and the fallback-rate
@@ -107,7 +107,22 @@ size-mismatch note above) is grown to the bleed+marks size.
 
 ## Exchange rate
 
-The CHF→EUR rate is fetched live at generation time from the
+The upload page's "Exchange rate" choice, right above the buffer, controls
+where the CHF→EUR rate itself comes from:
+
+- **Daily rate** (default) — fetched live at generation time, subject to
+  the buffer below.
+- **Custom rate** — a rate the client types in themselves (e.g. `0.97`; a
+  comma decimal separator like `0,97` works too), used *exactly* as
+  entered for every EUR price in that PDF. No buffer on top, regardless of
+  the buffer checkbox's state — the whole point is letting the client
+  directly control the final price with a number they chose, not adding a
+  hidden markup they didn't ask for (see `fx_rate.get_current_rate`'s
+  `custom_rate` parameter). The result page reflects this: "Rate source:
+  Custom (entered manually)", with no separate mid-market-rate/buffer
+  lines, since neither applies.
+
+The daily rate is fetched live at generation time from the
 **[Frankfurter API](https://frankfurter.dev)** — free, no API key, sourced
 from ECB reference rates.
 
@@ -118,17 +133,21 @@ from ECB reference rates.
 > (buffer, fallback, rounding) stays the same.
 
 A configurable buffer (`config.json` → `fx.buffer_percent`, default `1.0`
-i.e. +1%) is added on top of the fetched mid-market rate before it's used,
-to cover fluctuation between generation and actual use. Whether it's
+i.e. +1%) is added on top of the fetched daily mid-market rate before it's
+used, to cover fluctuation between generation and actual use. Whether it's
 applied at all is a per-generation choice, not just a config value — there's
 a checkbox on the upload page ("Apply +1% buffer on top of the live rate"),
 checked by default. Unchecking it doesn't change `config.json`, it just
 uses the raw mid-market rate for that one PDF; the result page reflects
 whichever actually happened ("Buffer applied: +1.0%" or "None (disabled)").
+This only ever affects the daily rate — it's simply ignored when a custom
+rate is chosen, whatever the checkbox says.
 
 If the live fetch fails for any reason (network down, API error), the app
 falls back to `config.json` → `fx.fallback_rate` and shows a visible warning
-banner in the UI with the reason.
+banner in the UI with the reason. (This fallback only applies to the daily
+rate too — a custom rate never touches the live fetch in the first place,
+so there's nothing to fall back from.)
 
 EUR prices are computed as `ROUND(CHF * buffered_rate, 2)` for every price
 cell at generation time. This is the **only** source of truth for EUR
@@ -139,13 +158,16 @@ an older version are ignored.
 
 Every price in the workbook is the manufacturer's **wholesale** price.
 The upload page has a "Resale price multiplier" dropdown, right below the
-exchange rate buffer: **None** (disabled, default — today's plain
-wholesale-only table) or one of **×1.1 / ×1.2 / ×1.3 / ×1.4 / ×1.5**
-(+10% through +50%). Picking one adds a resale-price column, computed as
-`ROUND(wholesale price * multiplier, 2)`, next to every wholesale price in
-the table — one multiplier for the whole document, applied uniformly
-(see `generate_pricelist.py`'s `apply_resale_multiplier` /
-`RESALE_MULTIPLIERS`).
+exchange rate buffer: **None** (disabled, default — the plain
+wholesale-price table) or one of **×0.5 / ×0.6 / ×0.7 / ×0.8 / ×0.9 /
+×1.1 / ×1.2 / ×1.3 / ×1.4 / ×1.5** (-50% through +50%) — one multiplier
+for the whole document, applied uniformly (see `generate_pricelist.py`'s
+`apply_resale_multiplier` / `RESALE_MULTIPLIERS`).
+
+Picking one **replaces** every wholesale price shown with its resale price
+— `ROUND(wholesale price * multiplier, 2)` — rather than showing both side
+by side, so the table's shape (Options, then one price column per active
+currency) never changes regardless of whether a multiplier is chosen.
 
 Resale is computed from each currency's own (already-rounded) wholesale
 value directly — CHF resale from CHF wholesale, EUR resale from EUR
@@ -153,24 +175,18 @@ wholesale — rather than converting through the other currency, so "resale
 = wholesale × multiplier" holds exactly in whichever currency column
 you're actually looking at.
 
-**Column layout:** with a single currency shown, the table just gains a
-second price column ("Wholesale" / "Resale"). With CHF + EUR both shown,
-that would be 4 price columns — instead of flattening them, the header
-groups CHF and EUR each into their own Wholesale/Resale pair (a two-row
-header, `rowspan`/`colspan` on the "Option" and currency cells):
-
-```
-                    CHF              EUR
-OPTION       WHOLESALE  RESALE  WHOLESALE  RESALE
-CLARITY B-UV   120.00   144.00   109.80    131.76
-```
-
-The "Wholesale"/"Resale" column headers follow the client's language
-choice like the rest of the PDF's added text (see "Language" above) —
-deliberately short (e.g. German "Einkauf"/"Verkauf" rather than the fuller
-"Großhandelspreis"/"Wiederverkaufspreis") so they don't wrap in the
-narrower 4-column layout; adjust `i18n.py`'s `"pdf_wholesale_column"`/
-`"pdf_resale_column"` if you'd rather have the fuller forms.
+The front cover also always gets a price-type mention, stamped
+right-aligned on the same line as the "Rates from ..." date stamp,
+mirroring its left margin (see `cover_stamp.py`'s `price_type_text`):
+**"Sale prices"** ("Prix de vente" / "Verkaufspreise") when a multiplier
+is chosen, or **"Wholesale prices"** ("Prix d'achat" / "Einkaufspreise")
+when it isn't — see `i18n.py`'s `pdf_sale_prices_label` /
+`pdf_wholesale_prices_label`. Either way it flags which kind of price the
+table shows: the client's own sale price, or the manufacturer's plain
+wholesale price. It's front-cover only: the back cover's own
+bottom-right corner already carries the `www.ikyum.com` + QR code block,
+which the mirrored right margin would otherwise land on top of. Applies
+identically to both PDF types.
 
 ## Config
 
@@ -180,7 +196,7 @@ Everything you'll want to tune lives in `config.json`:
 |---|---|
 | `fx.buffer_percent` | Buffer added on top of the live mid-market rate |
 | `fx.fallback_rate` | Manual rate used if the live fetch fails |
-| `covers.cover_template` / `covers.back_cover_template` | Paths to the cover PDFs |
+| `covers.web` / `covers.print` | Each a `{cover_template, back_cover_template}` pair of paths — see "Cover templates: one pair per PDF type" above |
 | `date_stamp.cover` / `date_stamp.back_cover` | x/y (points, from bottom-left), font, size, color for the date stamp on each cover |
 
 Re-run `make_placeholder_covers.py` after changing `date_stamp` positions to
@@ -189,8 +205,12 @@ see the updated placeholder marker box.
 ## Font
 
 Everything — the upload page, the price-table pages, and the "Rates from
-..." date stamp on both covers — uses **Inter**, self-hosted under
+..." / "Sale prices" / "Wholesale prices" cover stamps — uses **Inter**, self-hosted under
 `static/fonts/` (SIL Open Font License 1.1, see `static/fonts/OFL.txt`).
+The cover stamps specifically use **Inter-Bold at 10pt** (`config.json`'s
+`date_stamp.cover.font` / `date_stamp.back_cover.font`), matching the
+weight and size of the cover templates' own nearby text (e.g. the front
+cover's "IKYUM® — Verres ophtalmiques sur mesure." tagline).
 It's fetched once as static `.woff` files (regular/medium/semibold/bold)
 and used two ways:
 
@@ -213,9 +233,11 @@ and the `_INTER_WEIGHTS` mapping in `cover_stamp.py`.
 
 The upload/result pages' background is `#006db0` (`--bg` in
 `static/style.css`) and the top-left logo is `static/logo.png` — the "K"
-mark, extracted directly from `cover-template.pdf` (with its transparency
-mask intact) rather than recreated by hand, so it's pixel-identical to what
-the real cover uses. It's rendered at a fixed 140px width via the `.logo`
+mark, extracted directly from an early cover design (the now-superseded
+`cover-template.pdf`, still in the project root but no longer referenced
+by `config.json` — see "Cover templates: one pair per PDF type" above)
+with its transparency mask intact, rather than recreated by hand, so it's
+pixel-identical to the real covers. It's rendered at a fixed 140px width via the `.logo`
 CSS rule. To swap in a higher-resolution version later, replace
 `static/logo.png` (any resolution works — it's always displayed at 140px
 wide) and keep the filename the same, or update the `<img>` src in
@@ -289,11 +311,14 @@ single already-stamped pages with no internal links of their own to carry
 over.
 
 **Back to top:** every price-table page (web mode only — see "PDF type"
-below) also carries a small "↑ Contents" link in the top-right corner,
-back to the table of contents (`.back-to-top` in `generate_pricelist.py`,
-targeting the TOC's own `id="toc"`) — a discreet way back to the index
-from anywhere in a long catalog, without needing the PDF viewer's own page
-navigation.
+below) also carries a small "↑ Index" pill-shaped button in the top-right
+corner, back to the table of contents (`.back-to-top` in
+`generate_pricelist.py`, targeting the TOC's own `id="toc"`) — a discreet
+way back to the index from anywhere in a long catalog, without needing
+the PDF viewer's own page navigation. Styled with a light background,
+border and rounded corners (rather than plain text) so it reads clearly
+as tappable, and sits a bit down from the physical top edge — both for
+easier use on touchscreen PDF viewers (e.g. iPad).
 
 ## PDF type: web vs print
 
@@ -320,21 +345,45 @@ buffer:
     a multiple of 4 — required for saddle-stitch booklet printing, where
     each physical sheet folds down to 4 pages.
 
-**Known limitation, current cover templates only:** `cover-template.pdf`
-and `back-cover-template.pdf` are plain trim-size PDFs (148 x 210mm) with
-no bleed artwork of their own baked in — the front cover in particular is
-already a finished design whose photography reaches exactly to the trim
-edge with nothing further out. `print_marks.py` can only add *blank*
-margin around them (crop marks drawn correctly, but a genuine white/empty
-bleed strip rather than extended artwork), so on a physical print run any
-trimming variance could reveal a thin white sliver at the cut edge. Fixing
-this properly means re-exporting the cover artwork from InDesign/
-Illustrator with real 3mm bleed built in; `print_marks.add_bleed_and_marks`
-reads each page's own actual size, so it'll keep working once that happens
-— though it currently always *adds* the full margin on top of whatever
-page size it's given, so a future cover PDF that already ships with bleed
-baked in (a larger MediaBox than its TrimBox) would need that distinction
-handled explicitly rather than just dropped in as-is.
+### Cover templates: one pair per PDF type
+
+`config.json`'s `"covers"` has a separate cover/back-cover pair per
+`pdf_type` — `cover-template-web.pdf` / `back-cover-template-web.pdf` for
+Web, `cover-template-print.pdf` / `back-cover-template-print.pdf` for
+Print. The print pair are real InDesign exports with their own bleed and
+crop marks already built in (a `/TrimBox` — the true A5 cut size — smaller
+than the page's `/MediaBox`, which extends further out to include that
+margin); the web pair happen to be the same kind of file here, but don't
+need to be.
+
+`print_marks.py` tells the two cases apart per page via `has_own_bleed()`
+(`/TrimBox` smaller than `/MediaBox`) rather than assuming anything about
+a given file, so it does the right thing either way:
+
+- **Print mode**: a cover with its own bleed/marks (`has_own_bleed` true)
+  is used as-is, trusting the designer's own treatment; a plain trim-size
+  one (no `/TrimBox` of its own, e.g. if a placeholder ever needs
+  regenerating — see `make_placeholder_covers.py`) falls back to
+  `add_bleed_and_marks`, which fabricates a blank bleed margin and draws
+  our own crop marks (`print_layout.py`'s 3mm bleed + 5mm mark geometry).
+- **Web mode**: `crop_to_trim` strips a real cover's bleed margin back off
+  (a no-op for an already trim-size one), so every page of the interactive
+  PDF — including the covers — ends up the same clean 148 x 210mm.
+
+`cover_stamp.stamp_pdf_page` positions the date stamp relative to each
+page's own `/TrimBox` (its bottom-left corner) rather than the raw
+`/MediaBox`, so `config.json`'s `date_stamp.cover`/`back_cover` x/y stay
+correct regardless of how much (if any) bleed margin surrounds the trim
+area.
+
+**Page-size note:** the print cover pair's own bleed margin (measured off
+the actual files: ~7.4mm per side) doesn't exactly match this project's
+own 8mm bleed+marks margin used for the generated price-table pages and
+blank filler pages — so in print mode, the cover/back-cover end up
+~1.2mm smaller overall than the rest of the booklet. That's the designer's
+own real bleed choice, not a bug, and well within normal commercial
+trimming tolerance; `test_pipeline.py` accounts for it by excluding the
+cover pages from its "every page is the canonical size" check.
 
 ## How it fits together
 
@@ -350,17 +399,21 @@ handled explicitly rather than just dropped in as-is.
   most don't handle English ordinal suffixes (1st/2nd/3rd/11th–13th/21st...)
   out of the box.
 - **`cover_stamp.py`** — draws the date-stamp text onto a blank overlay page
-  (reportlab) and merges it onto the cover template page (`pypdf`
-  `merge_page`) — standard watermark-style stamping. The template's own
-  design is never touched, only drawn on top of. For `pdf_type="print"`,
-  also adds bleed + crop marks to the cover/back-cover pages (via
-  `print_marks.py`) and pads the final page count to a multiple of 4.
+  (reportlab) and merges it onto the cover template page, positioned
+  relative to the page's own `/TrimBox` (`pypdf`
+  `merge_transformed_page`) — standard watermark-style stamping. The
+  template's own design is never touched, only drawn on top of. Also
+  applies the right bleed/crop-mark treatment per `pdf_type` (via
+  `print_marks.py` — see "Cover templates: one pair per PDF type" above)
+  and, for `pdf_type="print"`, pads the final page count to a multiple
+  of 4.
 - **`print_layout.py`** — shared bleed/crop-mark/booklet-multiple constants
   for the "print PDF" export mode (see "PDF type: web vs print" above).
 - **`print_marks.py`** — adds bleed margin + crop marks to a trim-size PDF
-  page by hand (pypdf + reportlab) — used for the cover, back-cover, and
-  blank filler pages in print mode, since those are opaque pre-rendered
-  PDFs that `generate_pricelist.py`'s WeasyPrint/CSS approach never sees.
+  page by hand (pypdf + reportlab), or crops a real print-ready page's
+  bleed margin back off — used for the cover, back-cover, and blank
+  filler pages, since those are opaque pre-rendered PDFs that
+  `generate_pricelist.py`'s WeasyPrint/CSS approach never sees.
 - **`build_pricelist.py`** — orchestrates the above into one final PDF:
   stamped cover → TOC + price-table pages → stamped back cover (`pypdf`
   `PdfWriter`).
@@ -368,8 +421,9 @@ handled explicitly rather than just dropped in as-is.
 - **`i18n.py`** — EN/FR/DE translations for the web UI only (not PDF
   content — see the Language section above).
 - **`make_placeholder_covers.py`** / **`make_sample_data.py`** — one-off
-  generators for local testing artifacts (not needed once real covers and
-  real client workbooks are in use).
+  generators for local testing artifacts, useful again if a cover ever
+  needs a placeholder regenerated or a workbook fixture is needed (real
+  covers and real client workbooks are otherwise already in use).
 - **`test_pipeline.py`** — automated end-to-end check, including that every
   TOC link resolves to the correct final page.
 
@@ -441,7 +495,8 @@ price per item).
 
 **On the page**, each item is rendered as its own small block: the item
 name and description as a heading, then one row per priced option showing
-`Option | CHF | EUR`. That keeps the page narrow enough for A5 even when an
+`Options | CHF | EUR` (the column header is translated per language and
+always plural — see `i18n.py`'s `pdf_option_column_label`). That keeps the page narrow enough for A5 even when an
 item has many options — the tradeoff is that a workbook with lots of
 multi-option items produces a proportionally long PDF (a full lens catalog
 with ~280 items across 20 sections currently comes out to ~65 price-table

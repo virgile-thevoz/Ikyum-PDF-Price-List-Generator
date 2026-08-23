@@ -17,7 +17,7 @@ from pypdf import PdfReader
 from cover_stamp import assemble_final_pdf
 from date_stamp import format_rate_date_stamp
 from fx_rate import RateResult, get_current_rate, load_config
-from generate_pricelist import apply_exchange_rate, apply_resale_multiplier, parse_workbook, render_price_table_pdf
+from generate_pricelist import PDF_TYPES, apply_exchange_rate, apply_resale_multiplier, parse_workbook, render_price_table_pdf
 from i18n import get_translator
 
 
@@ -41,6 +41,7 @@ def build(
     pdf_type: str = "web",
     lang: str = "en",
     resale_multiplier: float | None = None,
+    custom_rate: float | None = None,
 ) -> BuildResult:
     """currency_mode selects which price column(s) appear in the price
     table: "chf", "eur", or "both" (default). The live rate is always
@@ -50,6 +51,11 @@ def build(
 
     apply_buffer turns config.json's fx.buffer_percent on (default) or off
     for this generation -- see fx_rate.get_current_rate.
+
+    custom_rate is None (default -- use the daily live/fallback rate,
+    subject to apply_buffer) or a positive CHF->EUR rate the client typed
+    in themselves, used exactly as given with no buffer on top -- see
+    fx_rate.get_current_rate.
 
     pdf_type is "web" (default, today's interactive PDF) or "print" (bleed +
     crop marks, non-clickable table of contents, final page count padded to
@@ -62,30 +68,43 @@ def build(
     translated word/phrase in the per-page footer (generate_pricelist.py's
     footer_role, via i18n.py's "pdf_footer_role"), the table of contents'
     title / "back to top" link text (index_label, via "pdf_index_label"),
-    and -- when resale_multiplier is set -- the price table's
-    wholesale/resale column headers ("pdf_wholesale_column"/
-    "pdf_resale_column"). Everything else in the PDF stays in whatever
-    language the workbook's own category/item names are written in -- this
-    only covers the app's own added text.
+    and each item's price sub-table column header (option_label, via
+    "pdf_option_column_label" -- e.g. "Options"/"Optionen", plural in every
+    language). Everything else in the PDF stays in whatever language the
+    workbook's own category/item names are written in -- this only covers
+    the app's own added text.
 
     resale_multiplier is None (default -- every price in the workbook is
-    shown as-is, today's plain wholesale-only table) or one of
-    generate_pricelist.RESALE_MULTIPLIERS (1.1-1.5): every priced option
-    then also shows a resale-price column per active currency, computed as
-    ROUND(wholesale price * multiplier, 2) -- see apply_resale_multiplier.
+    shown as-is, today's plain wholesale-price table) or one of
+    generate_pricelist.RESALE_MULTIPLIERS (0.5-0.9, 1.1-1.5): every priced
+    option's resale price, computed as ROUND(wholesale price * multiplier,
+    2), then *replaces* its wholesale price in the table -- see
+    apply_resale_multiplier. Either way, the front cover also gets a
+    mention flagging which kind of price the table shows, on the same line
+    as the date stamp, right-aligned -- see cover_stamp.assemble_final_pdf's
+    price_type_text -- exactly one of "Sale prices"/"Prix de vente"/
+    "Verkaufspreise" (resale_multiplier set) or "Wholesale prices"/
+    "Prix d'achat"/"Einkaufspreise" (resale_multiplier is None) always
+    appears. Not shown on the back cover (see assemble_final_pdf).
     """
+    if pdf_type not in PDF_TYPES:
+        raise ValueError(f"pdf_type must be one of {PDF_TYPES}, got {pdf_type!r}")
     if config is None:
         config = load_config()
 
-    rate = get_current_rate(config, apply_buffer=apply_buffer)
+    rate = get_current_rate(config, apply_buffer=apply_buffer, custom_rate=custom_rate)
 
-    covers = config["covers"]
+    # A separate cover/back-cover pair per pdf_type -- see config.json's
+    # "covers" and cover_stamp.py's _finish_cover_page for what actually
+    # distinguishes them (a real print-ready cover carries its own bleed
+    # and crop marks; the "web" pair doesn't need any).
+    covers = config["covers"][pdf_type]
     stamps = config["date_stamp"]
     t = get_translator(lang)
     footer_role = t("pdf_footer_role")
     index_label = t("pdf_index_label")
-    wholesale_label = t("pdf_wholesale_column")
-    resale_label = t("pdf_resale_column")
+    option_label = t("pdf_option_column_label")
+    price_type_text = t("pdf_sale_prices_label") if resale_multiplier is not None else t("pdf_wholesale_prices_label")
 
     # The table of contents (rendered as part of the price-table PDF) needs
     # to know how many pages precede it in the final assembled PDF, purely
@@ -96,8 +115,7 @@ def build(
     apply_exchange_rate(sections, rate.buffered_rate)
     apply_resale_multiplier(sections, resale_multiplier)
     price_table_pdf = render_price_table_pdf(
-        sections, currency_mode, cover_page_count, pdf_type, footer_role, index_label,
-        resale_multiplier, wholesale_label, resale_label,
+        sections, currency_mode, cover_page_count, pdf_type, footer_role, index_label, option_label, resale_multiplier,
     )
 
     date_stamp_text = format_rate_date_stamp(rate.fetched_at, lang)
@@ -109,6 +127,7 @@ def build(
         cover_stamp_config=stamps["cover"],
         back_cover_stamp_config=stamps["back_cover"],
         pdf_type=pdf_type,
+        price_type_text=price_type_text,
     )
 
     item_count = sum(len(section.items) for section in sections)
