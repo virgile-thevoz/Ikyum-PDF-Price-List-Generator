@@ -494,13 +494,27 @@ PAGE_TEMPLATE = """
     page-break-inside: avoid;
     margin-bottom: 7pt;
   }
+  /* Extra top margin only on the item-block that *starts* a new
+     sub-heading group (see the template's has-heading class) -- gives
+     the sub-heading below noticeably more breathing room from the
+     previous group than the plain item-to-item gap, so a page with
+     several sub-headings (e.g. "Unifocal Free-Form" / "Progressif
+     Free-Form") reads as clearly separated groups rather than blending
+     into the item list. A plain margin-top on .item-heading itself
+     would collapse into .item-block's own margin instead of adding to
+     it, since .item-heading is .item-block's first child with no
+     border/padding between them -- putting it on the sibling-level
+     .item-block avoids that. */
+  .item-block.has-heading {
+    margin-top: 10pt;
+  }
   .item-heading {
-    font-size: 8.55pt;
+    font-size: 10pt;
     font-weight: 700;
-    letter-spacing: 0.3pt;
+    letter-spacing: 0.5pt;
     text-transform: uppercase;
-    color: #444;
-    margin: 0 0 5pt 0;
+    color: #1a1a1a;
+    margin: 0 0 6pt 0;
   }
   .item-name {
     font-size: 8.55pt;
@@ -565,7 +579,7 @@ PAGE_TEMPLATE = """
   <div class="section-title">{{ section.name }}</div>
   {% if section.description %}<div class="section-desc">{{ section.description }}</div>{% endif %}
   {% for item in section.items %}
-  <div class="item-block">
+  <div class="item-block{% if item.heading %} has-heading{% endif %}">
     {% if item.heading %}<div class="item-heading">{{ item.heading }}</div>{% endif %}
     <div class="item-name">{{ item.name }}</div>
     {% if item.description %}<div class="item-desc">{{ item.description }}</div>{% endif %}
