@@ -577,11 +577,14 @@ PAGE_TEMPLATE = """
      the exact bounding box of that price -- editable_fields.py reads
      those Rects back out to know precisely where to overlay a fillable
      form field, then discards the links themselves (see that module's
-     docstring). Styled to be visually identical to plain text so this
-     mode renders exactly like the normal table until the fields are
-     overlaid in post-processing. */
+     docstring). Transparent, not merely unstyled: the field editable_
+     fields.py overlays draws its own copy of the value (in the same font
+     and size, so it looks identical) directly over this same spot, so
+     this original text needs to occupy the exact same layout box -- for
+     an accurate /Rect -- without actually being visible, or the two would
+     double up. */
   .price-anchor {
-    color: inherit;
+    color: transparent;
     text-decoration: none;
   }
 </style>
@@ -758,12 +761,14 @@ def render_price_table_pdf(
     whether apply_resale_multiplier was ever called.
 
     editable_prices (default False) wraps every rendered price value in a
-    same-document link to a dummy anchor -- purely so WeasyPrint exports a
-    PDF link annotation whose /Rect exactly bounds that price, which
-    editable_fields.py then reads back out and replaces with a fillable
-    form field (see that module). Visually identical to the plain table --
-    .price-anchor inherits color and drops the underline -- this flag only
-    matters to the post-processing step, not to how the PDF looks.
+    same-document link to a dummy anchor, rendered with transparent text --
+    purely so WeasyPrint exports a PDF link annotation whose /Rect exactly
+    bounds that price (the transparent text still occupies the real layout
+    box, so the Rect is accurate) without the value actually being visible.
+    editable_fields.py reads that Rect back out and draws its own copy of
+    the value there, in the same font and size, as part of a fillable form
+    field (see that module) -- the net result looks identical to the plain
+    table, just via a real editable field instead of flat text.
     """
     if currency_mode not in CURRENCY_MODES:
         raise ValueError(f"currency_mode must be one of {CURRENCY_MODES}, got {currency_mode!r}")

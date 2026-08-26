@@ -45,6 +45,20 @@ opposite direction -- the *content* is merged onto the field's own overlay
 page (which keeps its own /Annots intact), and that combined page replaces
 the original in the writer.
 
+**Font:** reportlab's AcroForm.textfield() helper -- used here for the
+field's structural bits (its /DA fallback and /DR, needed for a viewer to
+redraw the value if a client actually edits it) -- hard-rejects any font
+name that isn't one of the standard 14 (Helvetica, Times-Roman, ...): it
+has no way to reference an embedded font like Inter at all. So the field's
+own starting *appearance* (what's visible before anyone edits it) isn't
+left as reportlab's Helvetica rendering -- it's replaced with a hand-built
+Form XObject that draws the same value in actual Inter at the table's own
+font size (see _build_inter_appearance), so what the client sees matches
+the rest of the table exactly. The one place this doesn't reach is what a
+viewer redraws *while* someone is actively typing into the field -- that
+still falls back to reportlab's Helvetica /DA, a standard, unavoidable
+AcroForm limitation shared by effectively every PDF form tool.
+
 ## Keeping the table of contents' links alive
 
 The document's TOC links (see generate_pricelist.py) live in the PDF's
@@ -59,17 +73,37 @@ tree and break every TOC link.
 """
 
 import io
+import os
 
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import ArrayObject, BooleanObject, DictionaryObject, NameObject, NumberObject
+from pypdf.generic import ArrayObject, BooleanObject, DictionaryObject, FloatObject, IndirectObject, NameObject, NumberObject, StreamObject
 from reportlab.lib.colors import Color
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 # Must match the id="..." target generate_pricelist.py's PAGE_TEMPLATE gives
 # every price-anchor link -- the /Dest a price's link annotation carries.
 PRICE_ANCHOR_DEST = "price-anchor-target"
 
-FIELD_FONT = "Helvetica"  # a base-14 font, so no font file needs embedding
+# Self-hosted Inter (SIL OFL 1.1, see static/fonts/OFL.txt), registered under
+# this name so _build_inter_appearance's canvas.setFont() can reference it --
+# same registration cover_stamp.py does for its own date-stamp text, kept
+# separate (rather than imported from there) so this module doesn't depend
+# on cover_stamp.py; registering the same name+file twice in one process is
+# harmless. Only the regular weight is needed -- table.price-subtable's
+# price cells use no font-weight override, so they render at the body's
+# default (regular).
+INTER_FONT_NAME = "Inter"
+_FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "fonts")
+pdfmetrics.registerFont(TTFont(INTER_FONT_NAME, os.path.join(_FONTS_DIR, "Inter-Regular.ttf")))
+
+# reportlab's AcroForm.textfield() only accepts the base-14 fonts (see this
+# module's docstring, "Font") -- used for the field's *structural* bits
+# only. The field's actual starting appearance is drawn separately in Inter
+# (see _build_inter_appearance) and FIELD_FONT_SIZE/FIELD_TEXT_COLOR are
+# shared between both so they stay in sync.
+FIELD_FONT = "Helvetica"
 FIELD_FONT_SIZE = 7.2  # matches table.price-subtable's own font-size
 FIELD_TEXT_COLOR = Color(0.102, 0.102, 0.102)  # #1a1a1a, same as the surrounding table text
 # reportlab's textfield() treats a color argument of None as "use my own
@@ -125,6 +159,51 @@ def _make_field_overlay(mediabox, rects_and_names: list[tuple[tuple[float, float
     return reader
 
 
+def _build_inter_appearance(writer: PdfWriter, field_width: float, field_height: float, value: str, keep_alive: list) -> IndirectObject:
+    """A Form XObject, sized exactly (field_width, field_height), that draws
+    `value` right-aligned in real Inter at FIELD_FONT_SIZE -- used to
+    replace a field's own /AP /N (its normal, "what's shown before anyone
+    edits it" appearance), since reportlab's AcroForm.textfield() can't
+    reference Inter itself (see this module's docstring, "Font").
+
+    Built the same way cover_stamp.py draws the date stamp -- a plain
+    reportlab canvas with setFont/drawRightString -- except here the
+    resulting one-page PDF's own content stream and resources are
+    repackaged as a Form XObject rather than merged onto another page: a
+    single-page PDF's content is already shaped like one (a self-contained
+    stream plus the resources -- here, the embedded Inter font -- it
+    references), so it only needs /Type, /Subtype, /FormType, and /BBox
+    added around it to be usable as an annotation's appearance stream.
+
+    keep_alive: the caller's own list to append this function's throwaway
+    PdfReader to -- see make_price_table_editable's _keep_alive for why
+    (the same id()-reuse hazard applies here too, one reader per call).
+    """
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=(field_width, field_height))
+    c.setFont(INTER_FONT_NAME, FIELD_FONT_SIZE)
+    c.setFillColor(FIELD_TEXT_COLOR)
+    c.drawRightString(field_width - FIELD_PADDING_X_PT, FIELD_PADDING_Y_PT, value)
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    reader = PdfReader(buffer)
+    keep_alive.append(reader)
+    page = reader.pages[0]
+
+    xobj = StreamObject()
+    content = page.get_contents()
+    xobj.set_data(content.get_data() if content is not None else b"")
+    xobj[NameObject("/Type")] = NameObject("/XObject")
+    xobj[NameObject("/Subtype")] = NameObject("/Form")
+    xobj[NameObject("/FormType")] = NumberObject(1)
+    xobj[NameObject("/BBox")] = ArrayObject([FloatObject(0), FloatObject(0), FloatObject(field_width), FloatObject(field_height)])
+    resources = page.get("/Resources")
+    if resources is not None:
+        xobj[NameObject("/Resources")] = resources.clone(writer)
+    return writer._add_object(xobj)
+
+
 def make_price_table_editable(price_table_pdf_bytes: bytes, field_values: list[str]) -> bytes:
     """Returns a copy of `price_table_pdf_bytes` where every price-anchor
     link (see generate_pricelist.py's editable_prices) has been replaced
@@ -156,15 +235,17 @@ def make_price_table_editable(price_table_pdf_bytes: bytes, field_values: list[s
     field_counter = 0
     # pypdf's IndirectObject.clone() caches its per-source-object translation
     # keyed by id(source_reader) (a raw memory address, via a dict on the
-    # writer). A one-page-per-price overlay_reader built inside the loop
-    # below is otherwise unreferenced once the loop moves on, so Python is
-    # free to garbage-collect it and reuse its memory address for the *next*
-    # overlay_reader -- and when that happens, pypdf's cache mistakes the
-    # new reader for the old one and silently reuses (rather than clones) an
-    # earlier page's field objects, quietly dropping the current page's own
-    # fields. Keeping every overlay_reader alive here (it's cheap -- one
-    # small in-memory PDF per page) for the rest of this call keeps every
-    # id() distinct and sidesteps that collision entirely.
+    # writer). Every throwaway one-page PdfReader built below -- one
+    # overlay_reader per page, one more per field from
+    # _build_inter_appearance -- is otherwise unreferenced as soon as the
+    # loop moves past it, so Python is free to garbage-collect it and reuse
+    # its memory address for the *next* one -- and when that happens,
+    # pypdf's cache mistakes the new reader for an old one and silently
+    # reuses (rather than clones) that earlier object, quietly dropping
+    # whatever the current one was supposed to contribute. Keeping every
+    # such reader alive here (cheap -- these are tiny in-memory PDFs) for
+    # the rest of this call keeps every id() distinct and sidesteps that
+    # collision entirely.
     _keep_alive: list = []
 
     for page in writer.pages:
@@ -182,7 +263,14 @@ def make_price_table_editable(price_table_pdf_bytes: bytes, field_values: list[s
                     f"found more price-anchor links than field_values entries ({len(field_values)}) -- "
                     "field_values must come from price_field_values() for this exact PDF"
                 )
-            rect = tuple(float(v) for v in annot.get_object()["/Rect"])
+            x0, y0, x1, y1 = (float(v) for v in annot.get_object()["/Rect"])
+            # Normalize: WeasyPrint's own /Rect ordering for these link
+            # annotations turns out to be [left, top, right, bottom] rather
+            # than the PDF-conventional [left, bottom, right, top] (i.e. its
+            # y0 > y1) -- min()/max() here rather than trusting position
+            # keeps every width/height computed from `rect` downstream
+            # (field box size, appearance BBox) positive regardless.
+            rect = (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
             field_counter += 1
             rects_and_names.append((rect, f"price_{field_counter}", field_values[value_index]))
             value_index += 1
@@ -214,10 +302,26 @@ def make_price_table_editable(price_table_pdf_bytes: bytes, field_values: list[s
         if annots_array is None:
             page[NameObject("/Annots")] = ArrayObject()
             annots_array = page["/Annots"]
-        for overlay_annot in overlay_reader.pages[0].get("/Annots") or []:
+        # zip(), not two separate loops: _make_field_overlay builds exactly
+        # one field per rects_and_names entry, in that same order, so the
+        # Nth annotation on the overlay page is the Nth entry here -- which
+        # is what lets each field's own (rect, value) pair be matched back
+        # up to it, needed for _build_inter_appearance below.
+        overlay_annots = overlay_reader.pages[0].get("/Annots") or []
+        for (rect, _name, value), overlay_annot in zip(rects_and_names, overlay_annots):
             cloned_ref = overlay_annot.clone(writer)
             annots_array.append(cloned_ref)
             field_refs.append(cloned_ref)
+
+            # Swap in the Inter-rendered appearance (see this module's
+            # docstring, "Font") in place of reportlab's Helvetica one --
+            # same box size the field itself was built with, so it lines up
+            # exactly.
+            x0, y0, x1, y1 = rect
+            field_width = (x1 - x0) + 2 * FIELD_PADDING_X_PT
+            field_height = (y1 - y0) + 2 * FIELD_PADDING_Y_PT
+            ap_ref = _build_inter_appearance(writer, field_width, field_height, value, _keep_alive)
+            cloned_ref.get_object()[NameObject("/AP")] = DictionaryObject({NameObject("/N"): ap_ref})
 
     if value_index != len(field_values):
         raise ValueError(
