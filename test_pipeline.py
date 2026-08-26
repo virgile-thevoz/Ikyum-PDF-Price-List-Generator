@@ -18,11 +18,10 @@ Checks:
     generate_pricelist.apply_resale_multiplier -- replaces it in the table
   - custom_rate: bypasses the live/fallback fetch and the buffer entirely,
     used exactly as given for EUR prices, matching fx_rate.get_current_rate
-  - "Sale prices"/"Wholesale prices" cover stamp: exactly one of the two
-    (translated) always appears on the front cover -- and only the front
-    cover -- on the same line as the date stamp; "sale" when a resale
-    multiplier is set, "wholesale" when it isn't; holds for both
-    pdf_type values
+  - "Sale prices" cover stamp: the translated label always appears on the
+    front cover -- and only the front cover -- on the same line as the
+    date stamp, regardless of whether a resale multiplier is set; holds
+    for both pdf_type values
   - language-dependent PDF content follows lang: the cover date stamp, the
     footer's translated role, the TOC/back-to-top index label, and each
     item's price sub-table "Options" column header (always plural)
@@ -218,52 +217,28 @@ def main() -> int:
     if not invalid_resale_raised:
         failures.append("apply_resale_multiplier(1.25): expected ValueError for an out-of-range multiplier")
 
-    # -- "Sale prices"/"Wholesale prices" cover stamp: exactly one of the
-    #    two always appears (translated, per lang) on the front cover, on
-    #    the same line as the date stamp -- "sale" when a resale multiplier
-    #    is set, "wholesale" when it isn't -- never on the back cover, for
-    #    both pdf_type values.
+    # -- "Sale prices" cover stamp: the translated label always appears on
+    #    the front cover, on the same line as the date stamp -- regardless
+    #    of resale_multiplier (unset, or a markup/discount/MSRP multiplier)
+    #    -- and never on the back cover, for both pdf_type values.
     sale_prices_labels = {"en": "Sale prices", "fr": "Prix de vente", "de": "Verkaufspreise"}
-    wholesale_prices_labels = {"en": "Wholesale prices", "fr": "Prix d'achat", "de": "Einkaufspreise"}
     for pdf_type in ("web", "print"):
-        for lang, wholesale_label in wholesale_prices_labels.items():
-            no_resale_result = build("sample_data.xlsx", config, pdf_type=pdf_type, lang=lang)
-            no_resale_reader = PdfReader(io.BytesIO(no_resale_result.pdf_bytes))
-            no_resale_front_text = no_resale_reader.pages[0].extract_text() or ""
-            no_resale_back_text = no_resale_reader.pages[-1].extract_text() or ""
-            if wholesale_label not in no_resale_front_text:
-                failures.append(
-                    f"pdf_type={pdf_type}, lang={lang!r}: expected {wholesale_label!r} on front cover with "
-                    f"resale_multiplier=None. Got: {no_resale_front_text!r}"
-                )
-            if sale_prices_labels[lang] in no_resale_front_text:
-                failures.append(
-                    f"pdf_type={pdf_type}, lang={lang!r}: {sale_prices_labels[lang]!r} shown on front cover "
-                    "with resale_multiplier=None"
-                )
-            if wholesale_label in no_resale_back_text:
-                failures.append(
-                    f"pdf_type={pdf_type}, lang={lang!r}: {wholesale_label!r} unexpectedly shown on back cover too"
-                )
-
-        for lang, label in sale_prices_labels.items():
-            sale_result = build("sample_data.xlsx", config, pdf_type=pdf_type, lang=lang, resale_multiplier=1.2)
-            sale_reader = PdfReader(io.BytesIO(sale_result.pdf_bytes))
-            front_text = sale_reader.pages[0].extract_text() or ""
-            back_text = sale_reader.pages[-1].extract_text() or ""
-            if label not in front_text:
-                failures.append(
-                    f"pdf_type={pdf_type}, lang={lang!r}: expected {label!r} on front cover. Got: {front_text!r}"
-                )
-            if wholesale_prices_labels[lang] in front_text:
-                failures.append(
-                    f"pdf_type={pdf_type}, lang={lang!r}: {wholesale_prices_labels[lang]!r} unexpectedly shown "
-                    "on front cover alongside resale_multiplier=1.2"
-                )
-            if label in back_text:
-                failures.append(
-                    f"pdf_type={pdf_type}, lang={lang!r}: {label!r} unexpectedly shown on back cover too"
-                )
+        for resale_multiplier in (None, 1.0, 1.2):
+            for lang, label in sale_prices_labels.items():
+                result = build("sample_data.xlsx", config, pdf_type=pdf_type, lang=lang, resale_multiplier=resale_multiplier)
+                result_reader = PdfReader(io.BytesIO(result.pdf_bytes))
+                front_text = result_reader.pages[0].extract_text() or ""
+                back_text = result_reader.pages[-1].extract_text() or ""
+                if label not in front_text:
+                    failures.append(
+                        f"pdf_type={pdf_type}, lang={lang!r}, resale_multiplier={resale_multiplier!r}: "
+                        f"expected {label!r} on front cover. Got: {front_text!r}"
+                    )
+                if label in back_text:
+                    failures.append(
+                        f"pdf_type={pdf_type}, lang={lang!r}, resale_multiplier={resale_multiplier!r}: "
+                        f"{label!r} unexpectedly shown on back cover too"
+                    )
 
     # -- Table of contents: page 2 (index 1) lists every category by name.
     cover_page_count = 1  # the placeholder cover is a single page

@@ -271,7 +271,7 @@ def apply_exchange_rate(sections: list[Section], buffered_rate: float) -> None:
                 price.eur = round(price.chf * buffered_rate, 2)
 
 
-RESALE_MULTIPLIERS = {0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5}
+RESALE_MULTIPLIERS = {0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5}
 
 
 def apply_resale_multiplier(sections: list[Section], multiplier: float | None) -> None:

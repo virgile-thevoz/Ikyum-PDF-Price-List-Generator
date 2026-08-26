@@ -86,16 +86,15 @@ def build(
 
     resale_multiplier is None (default -- every price in the workbook is
     shown as-is, today's plain wholesale-price table) or one of
-    generate_pricelist.RESALE_MULTIPLIERS (0.5-0.9, 1.1-1.5): every priced
+    generate_pricelist.RESALE_MULTIPLIERS (0.5-0.9, 1.0-1.5): every priced
     option's resale price, computed as ROUND(wholesale price * multiplier,
     2), then *replaces* its wholesale price in the table -- see
-    apply_resale_multiplier. Either way, the front cover also gets a
-    mention flagging which kind of price the table shows, on the same line
-    as the date stamp, right-aligned -- see cover_stamp.assemble_final_pdf's
-    price_type_text -- exactly one of "Sale prices"/"Prix de vente"/
-    "Verkaufspreise" (resale_multiplier set) or "Wholesale prices"/
-    "Prix d'achat"/"Einkaufspreise" (resale_multiplier is None) always
-    appears. Not shown on the back cover (see assemble_final_pdf).
+    apply_resale_multiplier. Either way, the front cover always gets a
+    "Sale prices"/"Prix de vente"/"Verkaufspreise" mention (see
+    cover_stamp.assemble_final_pdf's price_type_text), on the same line as
+    the date stamp, right-aligned -- there's no separate "wholesale prices"
+    wording; the cover doesn't distinguish whether resale_multiplier was
+    used. Not shown on the back cover (see assemble_final_pdf).
 
     editable_prices is False (default -- today's plain, flat PDF, nothing in
     it editable) or True: every price cell (and only price cells -- never
@@ -124,7 +123,7 @@ def build(
     footer_role = t("pdf_footer_role")
     index_label = t("pdf_index_label")
     option_label = t("pdf_option_column_label")
-    price_type_text = t("pdf_sale_prices_label") if resale_multiplier is not None else t("pdf_wholesale_prices_label")
+    price_type_text = t("pdf_sale_prices_label")
 
     # The table of contents (rendered as part of the price-table PDF) needs
     # to know how many pages precede it in the final assembled PDF, purely

@@ -133,16 +133,17 @@ def assemble_final_pdf(
     case they came in with a real bleed margin of their own -- see
     _finish_cover_page.
 
-    price_type_text, when given (build_pricelist.py always passes one --
-    "Sale prices" when a resale multiplier is chosen, "Wholesale prices"
-    otherwise, in whichever language is active), is stamped on the front
-    cover only -- on the same line as date_stamp_text, right-aligned to
-    mirror its left margin -- flagging which kind of price the table
-    shows. Not stamped on the back cover: its own bottom-right corner is
-    already occupied by the "www.ikyum.com" + QR code block, which the
-    mirrored right margin lands on top of. Applies identically regardless
-    of pdf_type: this is plain text stamped alongside the date, not
-    affected by the bleed/crop-mark handling above.
+    price_type_text, when given (build_pricelist.py always passes "Sale
+    prices", in whichever language is active -- there's no separate
+    "wholesale prices" wording; every generated PDF's cover reads "Sale
+    prices" regardless of whether a resale multiplier was used), is
+    stamped on the front cover only -- on the same line as
+    date_stamp_text, right-aligned to mirror its left margin. Not stamped
+    on the back cover: its own bottom-right corner is already occupied by
+    the "www.ikyum.com" + QR code block, which the mirrored right margin
+    lands on top of. Applies identically regardless of pdf_type: this is
+    plain text stamped alongside the date, not affected by the
+    bleed/crop-mark handling above.
     """
     writer = PdfWriter()
 

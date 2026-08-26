@@ -9,18 +9,16 @@ Scope note: the fallback-rate warning text built in fx_rate.py (RateResult
 message that embeds a raw exception string, which can't be meaningfully
 translated anyway.
 
-Most of these strings are web-UI-only (see app.py's render()). Six are
+Most of these strings are web-UI-only (see app.py's render()). Five are
 the exception, all resolved by build_pricelist.py rather than app.py
 directly: "pdf_footer_role" (the one word/phrase in generate_pricelist.py's
 per-page footer that varies by language), "pdf_index_label" (the table of
 contents' own title, and the matching word in the "back to top" link on
 every other page), "pdf_option_column_label" (each item's price sub-table
 column header, above its option names -- always plural, since an item
-usually lists more than one option), "pdf_sale_prices_label" and
-"pdf_wholesale_prices_label" (stamped on the front cover only,
-right-aligned next to the date stamp -- exactly one of the two always
-appears, "sale" when a resale multiplier is chosen and "wholesale" when it
-isn't, flagging which kind of price the table shows -- see
+usually lists more than one option), "pdf_sale_prices_label" (stamped on
+the front cover only, right-aligned next to the date stamp, on every
+generated PDF regardless of whether a resale multiplier was used -- see
 cover_stamp.assemble_final_pdf's price_type_text), and the "Rates from
 ..." cover date stamp, which is fully localized (label and date format
 both) by date_stamp.py -- see that module's LABELS/MONTH_NAMES rather than
@@ -44,13 +42,15 @@ TRANSLATIONS = {
         "buffer_checkbox_text": "Apply +{percent}% buffer on top of the live rate",
         "buffer_daily_only_hint": "Applies to the daily rate only",
         "buffer_none": "None (disabled)",
-        "resale_label": "Resale price multiplier",
+        "resale_label": "Suggested sale prices (multiplier)",
+        "resale_msrp_label": "MSRP",
+        "resale_none_label": "None (default MSRP)",
         "editable_prices_label": "Editable prices",
         "editable_prices_checkbox_text": "Make price cells editable in the PDF",
-        "editable_prices_hint": "The client can click a price and retype it. Item names, descriptions, and everything else stay fixed.",
+        "editable_prices_hint": "Edit prices individually once the PDF is exported. Item names, descriptions, and everything else stay fixed.",
         "pdf_type_label": "PDF type",
         "pdf_type_web": "Web (interactive)",
-        "pdf_type_print": "Print (crop marks + bleed)",
+        "pdf_type_print": "Print (crop marks)",
         "filename_label": "File name (optional)",
         "filename_placeholder": "Leave blank for an automatic name",
         "generate_button": "Generate PDF",
@@ -87,7 +87,6 @@ TRANSLATIONS = {
         "pdf_index_label": "Index",
         "pdf_option_column_label": "Options",
         "pdf_sale_prices_label": "Sale prices",
-        "pdf_wholesale_prices_label": "Wholesale prices",
     },
     "fr": {
         "page_title": "Générateur de liste de prix IKYUM",
@@ -105,13 +104,15 @@ TRANSLATIONS = {
         "buffer_checkbox_text": "Appliquer une marge de +{percent}% sur le taux en direct",
         "buffer_daily_only_hint": "S'applique uniquement au taux du jour",
         "buffer_none": "Aucune (désactivée)",
-        "resale_label": "Multiplicateur du prix de revente",
+        "resale_label": "Prix de vente suggérés (coefficient)",
+        "resale_msrp_label": "PVC",
+        "resale_none_label": "Aucun (PVC par défaut)",
         "editable_prices_label": "Prix modifiables",
         "editable_prices_checkbox_text": "Rendre les cellules de prix modifiables dans le PDF",
-        "editable_prices_hint": "Le client peut cliquer sur un prix et le retaper. Les noms d'articles, descriptions et tout le reste restent fixes.",
+        "editable_prices_hint": "Modifiez les prix individuellement une fois le PDF exporté. Les noms d'articles, descriptions et tout le reste restent fixes.",
         "pdf_type_label": "Type de PDF",
         "pdf_type_web": "Web (interactif)",
-        "pdf_type_print": "Impression (traits de coupe + fond perdu)",
+        "pdf_type_print": "Impression (traits de coupe)",
         "filename_label": "Nom du fichier (facultatif)",
         "filename_placeholder": "Laisser vide pour un nom automatique",
         "generate_button": "Générer le PDF",
@@ -148,7 +149,6 @@ TRANSLATIONS = {
         "pdf_index_label": "Index",
         "pdf_option_column_label": "Options",
         "pdf_sale_prices_label": "Prix de vente",
-        "pdf_wholesale_prices_label": "Prix d'achat",
     },
     "de": {
         "page_title": "IKYUM Preislisten-Generator",
@@ -166,13 +166,15 @@ TRANSLATIONS = {
         "buffer_checkbox_text": "Puffer von +{percent}% auf den Live-Kurs anwenden",
         "buffer_daily_only_hint": "Gilt nur für den Tageskurs",
         "buffer_none": "Keiner (deaktiviert)",
-        "resale_label": "Wiederverkaufsfaktor",
+        "resale_label": "Empfohlene Verkaufspreise (Faktor)",
+        "resale_msrp_label": "UVP",
+        "resale_none_label": "Keiner (Standard-UVP)",
         "editable_prices_label": "Bearbeitbare Preise",
         "editable_prices_checkbox_text": "Preiszellen im PDF bearbeitbar machen",
-        "editable_prices_hint": "Der Kunde kann einen Preis anklicken und neu eingeben. Artikelnamen, Beschreibungen und alles andere bleiben fest.",
+        "editable_prices_hint": "Bearbeiten Sie die Preise einzeln, nachdem das PDF exportiert wurde. Artikelnamen, Beschreibungen und alles andere bleiben fest.",
         "pdf_type_label": "PDF-Typ",
         "pdf_type_web": "Web (interaktiv)",
-        "pdf_type_print": "Druck (Schnittmarken + Beschnitt)",
+        "pdf_type_print": "Druck (Schnittmarken)",
         "filename_label": "Dateiname (optional)",
         "filename_placeholder": "Leer lassen für einen automatischen Namen",
         "generate_button": "PDF erstellen",
@@ -209,7 +211,6 @@ TRANSLATIONS = {
         "pdf_index_label": "Verzeichnis",
         "pdf_option_column_label": "Optionen",
         "pdf_sale_prices_label": "Verkaufspreise",
-        "pdf_wholesale_prices_label": "Einkaufspreise",
     },
 }
 

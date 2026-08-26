@@ -54,9 +54,9 @@
 
         <div class="field-label">{{ t('resale_label') }}</div>
         <select name="resale_multiplier" class="text-input">
-          <option value="" {% if not resale_multiplier %}selected{% endif %}>{{ t('buffer_none') }}</option>
-          {% for m in [0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5] %}
-          <option value="{{ m }}" {% if resale_multiplier == m|string %}selected{% endif %}>&times;{{ "%.1f"|format(m) }} ({{ "%+d"|format((((m - 1) * 100) | round | int)) }}%)</option>
+          <option value="" {% if not resale_multiplier %}selected{% endif %}>{{ t('resale_none_label') }}</option>
+          {% for m in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5] %}
+          <option value="{{ m }}" {% if resale_multiplier == m|string %}selected{% endif %}>{% if m == 1.0 %}&times;1 ({{ t('resale_msrp_label') }}){% else %}&times;{{ "%.1f"|format(m) }} ({{ "%+d"|format((((m - 1) * 100) | round | int)) }}%){% endif %}</option>
           {% endfor %}
         </select>
 

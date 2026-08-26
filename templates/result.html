@@ -28,7 +28,7 @@
         <div><strong>{{ t('label_filename') }}:</strong> {{ download_name }}</div>
         <div><strong>{{ t('label_currency') }}:</strong> {{ t('currency_' + currency_mode) }}</div>
         <div><strong>{{ t('label_pdf_type') }}:</strong> {{ t('pdf_type_' + pdf_type) }}</div>
-        <div><strong>{{ t('label_resale_multiplier') }}:</strong> {% if resale_multiplier %}&times;{{ "%.1f"|format(resale_multiplier) }}{% else %}{{ t('buffer_none') }}{% endif %}</div>
+        <div><strong>{{ t('label_resale_multiplier') }}:</strong> {% if resale_multiplier %}&times;{{ "%.1f"|format(resale_multiplier) }}{% else %}{{ t('resale_none_label') }}{% endif %}</div>
         <div><strong>{{ t('label_editable_prices') }}:</strong> {% if editable_prices %}{{ t('editable_prices_yes') }}{% else %}{{ t('editable_prices_no') }}{% endif %}</div>
         <div><strong>{{ t('label_rate_source') }}:</strong>
           {% if rate.source == "custom" %}{{ t('rate_source_custom') }}

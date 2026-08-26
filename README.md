@@ -157,12 +157,16 @@ an older version are ignored.
 ## Resale price
 
 Every price in the workbook is the manufacturer's **wholesale** price.
-The upload page has a "Resale price multiplier" dropdown, right below the
-exchange rate buffer: **None** (disabled, default — the plain
-wholesale-price table) or one of **×0.5 / ×0.6 / ×0.7 / ×0.8 / ×0.9 /
-×1.1 / ×1.2 / ×1.3 / ×1.4 / ×1.5** (-50% through +50%) — one multiplier
-for the whole document, applied uniformly (see `generate_pricelist.py`'s
-`apply_resale_multiplier` / `RESALE_MULTIPLIERS`).
+The upload page has a "Suggested sale prices (multiplier)" dropdown,
+right below the exchange rate buffer: **None** (disabled, default — the
+plain wholesale-price table) or one of **×0.5 / ×0.6 / ×0.7 / ×0.8 / ×0.9
+/ ×1 (MSRP) / ×1.1 / ×1.2 / ×1.3 / ×1.4 / ×1.5** — one multiplier for the
+whole document, applied uniformly (see `generate_pricelist.py`'s
+`apply_resale_multiplier` / `RESALE_MULTIPLIERS`). ×1 computes the same
+value as the plain wholesale price (a 0% markup) but is offered as its own
+explicit option, labelled "MSRP" rather than "(+0%)" like the others, for
+when the client's suggested sale price genuinely equals the wholesale
+price.
 
 Picking one **replaces** every wholesale price shown with its resale price
 — `ROUND(wholesale price * multiplier, 2)` — rather than showing both side
@@ -175,18 +179,16 @@ wholesale — rather than converting through the other currency, so "resale
 = wholesale × multiplier" holds exactly in whichever currency column
 you're actually looking at.
 
-The front cover also always gets a price-type mention, stamped
-right-aligned on the same line as the "Rates from ..." date stamp,
-mirroring its left margin (see `cover_stamp.py`'s `price_type_text`):
-**"Sale prices"** ("Prix de vente" / "Verkaufspreise") when a multiplier
-is chosen, or **"Wholesale prices"** ("Prix d'achat" / "Einkaufspreise")
-when it isn't — see `i18n.py`'s `pdf_sale_prices_label` /
-`pdf_wholesale_prices_label`. Either way it flags which kind of price the
-table shows: the client's own sale price, or the manufacturer's plain
-wholesale price. It's front-cover only: the back cover's own
-bottom-right corner already carries the `www.ikyum.com` + QR code block,
-which the mirrored right margin would otherwise land on top of. Applies
-identically to both PDF types.
+The front cover also always gets a **"Sale prices"** mention ("Prix de
+vente" / "Verkaufspreise" — see `i18n.py`'s `pdf_sale_prices_label`),
+stamped right-aligned on the same line as the "Rates from ..." date
+stamp, mirroring its left margin (see `cover_stamp.py`'s
+`price_type_text`). This is unconditional — every generated PDF's cover
+reads "Sale prices" regardless of whether a resale multiplier was chosen;
+there's no separate "wholesale prices" wording. It's front-cover only:
+the back cover's own bottom-right corner already carries the
+`www.ikyum.com` + QR code block, which the mirrored right margin would
+otherwise land on top of. Applies identically to both PDF types.
 
 ## Editable prices
 
