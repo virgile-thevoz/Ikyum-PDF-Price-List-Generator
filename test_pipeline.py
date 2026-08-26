@@ -26,6 +26,11 @@ Checks:
   - language-dependent PDF content follows lang: the cover date stamp, the
     footer's translated role, the TOC/back-to-top index label, and each
     item's price sub-table "Options" column header (always plural)
+  - editable_prices (editable_fields.py): off by default, no /AcroForm
+    fields anywhere; when on, exactly one fillable field per rendered price
+    cell, pre-filled with the same value the table shows (wholesale or
+    resale), in document order, with the table of contents' own links still
+    intact and no stray price-anchor link left behind
 
 Run with: python test_pipeline.py
 """
@@ -37,7 +42,7 @@ from pypdf import PdfReader
 
 from build_pricelist import build
 from fx_rate import get_current_rate, load_config
-from generate_pricelist import apply_exchange_rate, apply_resale_multiplier, parse_workbook
+from generate_pricelist import apply_exchange_rate, apply_resale_multiplier, parse_workbook, price_field_values
 from print_layout import BOOKLET_PAGE_MULTIPLE, MARK_MARGIN_MM, MM_TO_PT, TRIM_HEIGHT_MM, TRIM_WIDTH_MM
 from print_marks import has_own_bleed
 
@@ -375,6 +380,76 @@ def main() -> int:
                 f"lang={lang!r}: option column header {option_label!r} not found on first section page. "
                 f"Got: {first_section_text!r}"
             )
+
+    # -- Editable prices: off by default -- the plain PDF built at the very
+    #    top of this test should carry no form fields at all.
+    if reader.get_fields():
+        failures.append(
+            f"editable_prices=False (default): expected no form fields, got {list(reader.get_fields().keys())[:5]}"
+        )
+
+    # -- editable_prices=True: exactly one fillable field per rendered price
+    #    cell, pre-filled with the same value the table itself shows, in the
+    #    same document order price_field_values() produces.
+    editable_sections = parse_workbook("sample_data.xlsx")
+    editable_result = build("sample_data.xlsx", config, currency_mode="both", editable_prices=True)
+    apply_exchange_rate(editable_sections, editable_result.rate.buffered_rate)
+    expected_field_values = price_field_values(editable_sections, show_chf=True, show_eur=True, show_resale=False)
+    editable_reader = PdfReader(io.BytesIO(editable_result.pdf_bytes))
+    editable_fields = editable_reader.get_fields() or {}
+    if len(editable_fields) != len(expected_field_values):
+        failures.append(f"editable_prices=True: expected {len(expected_field_values)} form fields, got {len(editable_fields)}")
+    else:
+        actual_values = [editable_fields[f"price_{i + 1}"]["/V"] for i in range(len(expected_field_values))]
+        if actual_values != expected_field_values:
+            mismatches = [
+                (i, exp, act) for i, (exp, act) in enumerate(zip(expected_field_values, actual_values)) if exp != act
+            ]
+            failures.append(f"editable_prices=True: field value mismatches (index, expected, actual): {mismatches[:5]}")
+
+    # No stray price-anchor links (see editable_fields.PRICE_ANCHOR_DEST)
+    # should survive -- they're meant to be fully replaced by the fields
+    # above, not left dangling underneath them.
+    stray_price_links = [
+        i
+        for i, p in enumerate(editable_reader.pages)
+        for a in (p.get("/Annots") or [])
+        if a.get_object().get("/Subtype") == "/Link" and a.get_object().get("/Dest") == "price-anchor-target"
+    ]
+    if stray_price_links:
+        failures.append(f"editable_prices=True: stray price-anchor link annotations still present on pages {stray_price_links}")
+
+    # The table of contents' own links must still resolve -- regression
+    # check for editable_fields.make_price_table_editable's writer.append()
+    # -based merge (see that module's docstring).
+    editable_named_dests = set(editable_reader.named_destinations.keys())
+    editable_expected_dest_names = {f"section-{i + 1}" for i in range(len(editable_sections))} | {"toc"}
+    if not editable_expected_dest_names.issubset(editable_named_dests):
+        failures.append(
+            f"editable_prices=True: TOC named destinations missing. Expected at least "
+            f"{editable_expected_dest_names}, got {editable_named_dests}"
+        )
+
+    # Item names must never end up wrapped in a form field -- only prices
+    # are meant to be editable.
+    first_item_name = editable_sections[0].items[0].name
+    if any(first_item_name in str(f.get("/V", "")) for f in editable_fields.values()):
+        failures.append(f"editable_prices=True: item name {first_item_name!r} unexpectedly found inside a form field value")
+
+    # -- editable_prices=True combined with resale_multiplier: fields should
+    #    be pre-filled with the resale price, not the wholesale price.
+    resale_editable_sections = parse_workbook("sample_data.xlsx")
+    resale_editable_result = build("sample_data.xlsx", config, currency_mode="chf", resale_multiplier=1.2, editable_prices=True)
+    apply_exchange_rate(resale_editable_sections, resale_editable_result.rate.buffered_rate)
+    apply_resale_multiplier(resale_editable_sections, 1.2)
+    expected_resale_field_values = price_field_values(resale_editable_sections, show_chf=True, show_eur=False, show_resale=True)
+    resale_editable_fields = PdfReader(io.BytesIO(resale_editable_result.pdf_bytes)).get_fields() or {}
+    actual_resale_values = [resale_editable_fields.get(f"price_{i + 1}", {}).get("/V") for i in range(len(expected_resale_field_values))]
+    if actual_resale_values != expected_resale_field_values:
+        failures.append(
+            f"editable_prices=True with resale_multiplier=1.2: expected field values {expected_resale_field_values}, "
+            f"got {actual_resale_values}"
+        )
 
     if failures:
         print("\nFAILED:")

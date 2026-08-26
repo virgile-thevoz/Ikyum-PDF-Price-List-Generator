@@ -60,6 +60,13 @@
           {% endfor %}
         </select>
 
+        <div class="field-label">{{ t('editable_prices_label') }}</div>
+        <label class="toggle-row">
+          <input type="checkbox" name="editable_prices" {% if editable_prices|default(false) %}checked{% endif %}>
+          {{ t('editable_prices_checkbox_text') }}
+        </label>
+        <div class="field-hint">{{ t('editable_prices_hint') }}</div>
+
         <div class="field-label">{{ t('pdf_type_label') }}</div>
         <div class="currency-choice">
           <label><input type="radio" name="pdf_type" value="web" {% if pdf_type|default('web') == 'web' %}checked{% endif %}> {{ t('pdf_type_web') }}</label>

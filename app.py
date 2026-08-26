@@ -123,12 +123,13 @@ def generate():
     rate_mode = request.form.get("rate_mode", "daily")
     custom_rate_raw = request.form.get("custom_rate", "")
     apply_buffer = "apply_buffer" in request.form
+    editable_prices = "editable_prices" in request.form
     buffer_percent = CONFIG["fx"]["buffer_percent"]
     # Common re-render context shared by every validation-error/exception
     # branch below, so the client's other choices aren't lost on error.
     form_state = dict(currency=currency_mode, pdf_type=pdf_type, output_name=output_name,
                        resale_multiplier=resale_multiplier_raw, apply_buffer=apply_buffer, buffer_percent=buffer_percent,
-                       rate_mode=rate_mode, custom_rate=custom_rate_raw)
+                       rate_mode=rate_mode, custom_rate=custom_rate_raw, editable_prices=editable_prices)
 
     uploaded = request.files.get("price_list")
     if uploaded is None or uploaded.filename == "":
@@ -158,7 +159,10 @@ def generate():
     uploaded.save(upload_path)
 
     try:
-        result = build(upload_path, CONFIG, currency_mode, apply_buffer, pdf_type, lang, resale_multiplier, custom_rate)
+        result = build(
+            upload_path, CONFIG, currency_mode, apply_buffer, pdf_type, lang, resale_multiplier, custom_rate,
+            editable_prices=editable_prices,
+        )
     except FileNotFoundError as exc:
         return render("index.html", 400, lang=lang, error=t("error_missing_cover", exc=exc), **form_state)
     except Exception as exc:
@@ -188,6 +192,7 @@ def generate():
         pdf_type=result.pdf_type,
         download_name=download_name,
         resale_multiplier=result.resale_multiplier,
+        editable_prices=result.editable_prices,
     )
 
 

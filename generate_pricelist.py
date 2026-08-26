@@ -300,6 +300,25 @@ def apply_resale_multiplier(sections: list[Section], multiplier: float | None) -
                 price.eur_resale = round(price.eur * multiplier, 2)
 
 
+def price_field_values(sections: list[Section], show_chf: bool, show_eur: bool, show_resale: bool) -> list[str]:
+    """Flat list of every price string PAGE_TEMPLATE's price_cell macro will
+    render, in the exact same order it renders them (sections -> items ->
+    prices -> [CHF, EUR]) -- editable_fields.py zips this 1:1 against the
+    price-anchor link annotations WeasyPrint emits in that same document
+    order, so each fillable field gets the right default value without
+    needing to re-extract text from the rendered PDF.
+    """
+    values: list[str] = []
+    for section in sections:
+        for item in section.items:
+            for price in item.prices:
+                if show_chf:
+                    values.append("%.2f" % (price.chf_resale if show_resale else price.chf))
+                if show_eur:
+                    values.append("%.2f" % (price.eur_resale if show_resale else price.eur))
+    return values
+
+
 PAGE_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -553,9 +572,24 @@ PAGE_TEMPLATE = """
   table.price-subtable tbody tr:nth-child(even) {
     background: #f7f7f5;
   }
+  /* editable_prices only: each price value is wrapped in an <a> so
+     WeasyPrint exports it as a real PDF link annotation, whose /Rect is
+     the exact bounding box of that price -- editable_fields.py reads
+     those Rects back out to know precisely where to overlay a fillable
+     form field, then discards the links themselves (see that module's
+     docstring). Styled to be visually identical to plain text so this
+     mode renders exactly like the normal table until the fields are
+     overlaid in post-processing. */
+  .price-anchor {
+    color: inherit;
+    text-decoration: none;
+  }
 </style>
 </head>
 <body>
+{% if editable_prices %}
+<span id="price-anchor-target"></span>
+{% endif %}
 {% if pdf_type == 'print' %}
 {% for mark in crop_marks %}
 <div class="crop-mark" style="{% for prop, val in mark.items() %}{{ prop }}: {{ val }}; {% endfor %}"></div>
@@ -574,6 +608,7 @@ PAGE_TEMPLATE = """
   {% endif %}
   {% endfor %}
 </div>
+{% macro price_cell(value) %}{% if editable_prices %}<a class="price-anchor" href="#price-anchor-target">{{ "%.2f"|format(value) }}</a>{% else %}{{ "%.2f"|format(value) }}{% endif %}{% endmacro %}
 {% for section in sections %}
 <div class="section" id="section-{{ loop.index }}">
   <div class="section-title">{{ section.name }}</div>
@@ -598,8 +633,8 @@ PAGE_TEMPLATE = """
           {# When a resale multiplier is chosen, its price *replaces* the
              wholesale price shown here rather than adding a second column
              next to it -- see apply_resale_multiplier. #}
-          {% if show_chf %}<td class="price-col">{{ "%.2f"|format(price.chf_resale if show_resale else price.chf) }}</td>{% endif %}
-          {% if show_eur %}<td class="price-col">{{ "%.2f"|format(price.eur_resale if show_resale else price.eur) }}</td>{% endif %}
+          {% if show_chf %}<td class="price-col">{{ price_cell(price.chf_resale if show_resale else price.chf) }}</td>{% endif %}
+          {% if show_eur %}<td class="price-col">{{ price_cell(price.eur_resale if show_resale else price.eur) }}</td>{% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -681,6 +716,7 @@ def render_price_table_pdf(
     index_label: str = "Index",
     option_label: str = "Options",
     resale_multiplier: float | None = None,
+    editable_prices: bool = False,
 ) -> bytes:
     """Renders a table of contents plus the category sections to a
     multi-page A5 PDF and returns the raw PDF bytes (no cover pages --
@@ -720,6 +756,14 @@ def render_price_table_pdf(
     *replaces* its wholesale price in the table, rather than showing both;
     this parameter only controls which value is displayed, independent of
     whether apply_resale_multiplier was ever called.
+
+    editable_prices (default False) wraps every rendered price value in a
+    same-document link to a dummy anchor -- purely so WeasyPrint exports a
+    PDF link annotation whose /Rect exactly bounds that price, which
+    editable_fields.py then reads back out and replaces with a fillable
+    form field (see that module). Visually identical to the plain table --
+    .price-anchor inherits color and drops the underline -- this flag only
+    matters to the post-processing step, not to how the PDF looks.
     """
     if currency_mode not in CURRENCY_MODES:
         raise ValueError(f"currency_mode must be one of {CURRENCY_MODES}, got {currency_mode!r}")
@@ -762,6 +806,7 @@ def render_price_table_pdf(
         index_label=index_label,
         option_label=option_label,
         show_resale=show_resale,
+        editable_prices=editable_prices,
     )
     return HTML(string=html_content, base_url=PROJECT_ROOT).write_pdf()
 
@@ -773,12 +818,15 @@ def build_price_table_pdf(
     cover_page_count: int = 1,
     pdf_type: str = "web",
     resale_multiplier: float | None = None,
+    editable_prices: bool = False,
 ) -> bytes:
     """Convenience entry point: parse workbook -> apply rate -> render PDF."""
     sections = parse_workbook(xlsx_path)
     apply_exchange_rate(sections, buffered_rate)
     apply_resale_multiplier(sections, resale_multiplier)
-    return render_price_table_pdf(sections, currency_mode, cover_page_count, pdf_type, resale_multiplier=resale_multiplier)
+    return render_price_table_pdf(
+        sections, currency_mode, cover_page_count, pdf_type, resale_multiplier=resale_multiplier, editable_prices=editable_prices,
+    )
 
 
 if __name__ == "__main__":

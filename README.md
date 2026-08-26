@@ -188,6 +188,44 @@ bottom-right corner already carries the `www.ikyum.com` + QR code block,
 which the mirrored right margin would otherwise land on top of. Applies
 identically to both PDF types.
 
+## Editable prices
+
+The upload page has an "Editable prices" checkbox (off by default). When
+checked, every price cell in the generated PDF — and *only* price cells,
+never item names, descriptions, headers, or the table of contents — becomes
+a real, fillable PDF form field, pre-filled with the generated value. A
+client opening the PDF in Acrobat, Preview, or any other AcroForm-capable
+viewer can click a price and retype it; everything else in the document
+stays fixed, ordinary text, exactly as it would without the checkbox.
+
+This works with any currency mode and with resale pricing: whichever value
+is actually shown in a cell (wholesale or resale, CHF and/or EUR) is what
+the field is pre-filled with.
+
+**How it's built** (see `editable_fields.py` for the full mechanics):
+WeasyPrint has no concept of "editable" text — it only draws flat, static
+ink — so this is a second pass over the already-rendered price-table PDF.
+`generate_pricelist.py`'s price cells, when `editable_prices=True`, are
+each wrapped in a same-document link to a dummy anchor; WeasyPrint turns
+that into a real PDF link annotation whose `/Rect` happens to be the exact
+bounding box of that price, at zero cost to how the table looks (the link
+is styled to be visually invisible — inherited color, no underline).
+`editable_fields.py` reads those Rects back out, in the same order
+`generate_pricelist.price_field_values()` produces each price's string, and
+replaces each link with a borderless, transparent AcroForm text field
+(`reportlab`) sized to the exact same spot, then discards the link. The
+table of contents' own links are unaffected — see the module's docstring
+for how its `writer.append()`-based approach avoids the same
+named-destinations pitfall `cover_stamp.py` already calls out for its own
+cover/back-cover assembly step.
+
+One limitation worth knowing: CHF and EUR are independently editable
+fields, not linked by a formula — retyping a CHF price doesn't recompute
+the EUR price next to it (PDF form fields can run JavaScript in Acrobat,
+but that's not portable to Preview or other viewers, so this deliberately
+keeps every field a plain, independent value rather than something that
+only half-works outside Acrobat).
+
 ## Config
 
 Everything you'll want to tune lives in `config.json`:
@@ -414,9 +452,12 @@ cover pages from its "every page is the canonical size" check.
   bleed margin back off — used for the cover, back-cover, and blank
   filler pages, since those are opaque pre-rendered PDFs that
   `generate_pricelist.py`'s WeasyPrint/CSS approach never sees.
+- **`editable_fields.py`** — turns each price cell into a fillable PDF form
+  field when `editable_prices=True` (see "Editable prices" above);
+  otherwise unused.
 - **`build_pricelist.py`** — orchestrates the above into one final PDF:
-  stamped cover → TOC + price-table pages → stamped back cover (`pypdf`
-  `PdfWriter`).
+  stamped cover → TOC + price-table pages (→ `editable_fields.py`, if
+  requested) → stamped back cover (`pypdf` `PdfWriter`).
 - **`app.py`** — the local Flask upload UI.
 - **`i18n.py`** — EN/FR/DE translations for the web UI only (not PDF
   content — see the Language section above).

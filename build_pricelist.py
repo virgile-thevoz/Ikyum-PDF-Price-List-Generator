@@ -16,8 +16,16 @@ from pypdf import PdfReader
 
 from cover_stamp import assemble_final_pdf
 from date_stamp import format_rate_date_stamp
+from editable_fields import make_price_table_editable
 from fx_rate import RateResult, get_current_rate, load_config
-from generate_pricelist import PDF_TYPES, apply_exchange_rate, apply_resale_multiplier, parse_workbook, render_price_table_pdf
+from generate_pricelist import (
+    PDF_TYPES,
+    apply_exchange_rate,
+    apply_resale_multiplier,
+    parse_workbook,
+    price_field_values,
+    render_price_table_pdf,
+)
 from i18n import get_translator
 
 
@@ -31,6 +39,7 @@ class BuildResult:
     currency_mode: str
     pdf_type: str
     resale_multiplier: float | None
+    editable_prices: bool
 
 
 def build(
@@ -42,6 +51,7 @@ def build(
     lang: str = "en",
     resale_multiplier: float | None = None,
     custom_rate: float | None = None,
+    editable_prices: bool = False,
 ) -> BuildResult:
     """currency_mode selects which price column(s) appear in the price
     table: "chf", "eur", or "both" (default). The live rate is always
@@ -86,6 +96,16 @@ def build(
     "Verkaufspreise" (resale_multiplier set) or "Wholesale prices"/
     "Prix d'achat"/"Einkaufspreise" (resale_multiplier is None) always
     appears. Not shown on the back cover (see assemble_final_pdf).
+
+    editable_prices is False (default -- today's plain, flat PDF, nothing in
+    it editable) or True: every price cell (and only price cells -- never
+    item names, descriptions, or any other text) becomes a fillable PDF
+    form field the client can click into and retype, pre-filled with the
+    generated value. See editable_fields.py for how -- in short, a second
+    pass over the already-rendered price-table pages that replaces
+    generate_pricelist.py's price-anchor links with real AcroForm text
+    fields at the exact same position, before the cover/back-cover pages
+    are stamped and everything is assembled together.
     """
     if pdf_type not in PDF_TYPES:
         raise ValueError(f"pdf_type must be one of {PDF_TYPES}, got {pdf_type!r}")
@@ -116,7 +136,13 @@ def build(
     apply_resale_multiplier(sections, resale_multiplier)
     price_table_pdf = render_price_table_pdf(
         sections, currency_mode, cover_page_count, pdf_type, footer_role, index_label, option_label, resale_multiplier,
+        editable_prices=editable_prices,
     )
+    if editable_prices:
+        show_chf = currency_mode in ("chf", "both")
+        show_eur = currency_mode in ("eur", "both")
+        field_values = price_field_values(sections, show_chf, show_eur, resale_multiplier is not None)
+        price_table_pdf = make_price_table_editable(price_table_pdf, field_values)
 
     date_stamp_text = format_rate_date_stamp(rate.fetched_at, lang)
     final_pdf = assemble_final_pdf(
@@ -140,4 +166,5 @@ def build(
         currency_mode=currency_mode,
         pdf_type=pdf_type,
         resale_multiplier=resale_multiplier,
+        editable_prices=editable_prices,
     )
